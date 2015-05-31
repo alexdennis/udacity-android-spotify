@@ -9,6 +9,8 @@ import android.widget.CursorAdapter;
 import android.widget.ImageView;
 import android.widget.TextView;
 
+import com.squareup.picasso.Picasso;
+
 /**
  * Created by alex on 5/30/15.
  */
@@ -31,7 +33,14 @@ public class ArtistsAdapter extends CursorAdapter {
 
         ViewHolder viewHolder = (ViewHolder) view.getTag();
 
-        // TODO set image and name
+        String name = cursor.getString(2);
+        String image = cursor.getString(1);
+
+        viewHolder.nameView.setText(name);
+        if (image != null) {
+            Picasso.with(context).load(image).into(viewHolder.imageView);
+        }
+
     }
 
     /**
