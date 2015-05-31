@@ -12,6 +12,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.EditText;
 import android.widget.ListView;
+import android.widget.Toast;
 
 import kaaes.spotify.webapi.android.SpotifyApi;
 import kaaes.spotify.webapi.android.SpotifyService;
@@ -30,6 +31,7 @@ public class MainActivityFragment extends Fragment {
     private ArtistsAdapter mArtistsAdapter;
     private ListView mArtistsList;
     private EditText mArtistSearchBox;
+    private Toast mToast;
 
     public MainActivityFragment() {
     }
@@ -118,6 +120,13 @@ public class MainActivityFragment extends Fragment {
         protected void onPostExecute(MatrixCursor result) {
             if (result != null) {
                 mArtistsAdapter.swapCursor(result);
+            } else {
+                if (mToast != null) {
+                    mToast.cancel();
+                }
+
+                mToast = Toast.makeText(getActivity(), R.string.artists_not_found, Toast.LENGTH_SHORT);
+                mToast.show();
             }
         }
     }
