@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <array name="pref_country_values">
+        <item>US</item>
+        <item>GB</item>
+        <item>FR</item>
+        <item>JM</item>
+        <item>MX</item>
+    </array>
+    <array name="pref_country_entries">
+        <item>United States</item>
+        <item>United Kingdom</item>
+        <item>France</item>
+        <item>Jamaica</item>
+        <item>Mexico</item>
+    </array>
+</resources>
