@@ -100,7 +100,9 @@ public class TracksActivityFragment extends Fragment {
                 SpotifyApi api = new SpotifyApi();
                 SpotifyService spotify = api.getService();
                 HashMap<String, Object> options = new HashMap<>();
-                options.put("country", "US");
+                String preferredCountry = Utility.getPreferredCountry(getActivity());
+
+                options.put("country", preferredCountry);
                 Tracks results = spotify.getArtistTopTrack(params[0], options);
                 MatrixCursor cursor = new MatrixCursor(TRACK_COLUMNS);
 
@@ -128,7 +130,6 @@ public class TracksActivityFragment extends Fragment {
 
             } catch (RetrofitError error) {
                 Log.d(TAG, error.getMessage());
-
             }
 
             return null;

@@ -70,6 +70,8 @@ public class MainActivityFragment extends Fragment {
         mArtistSearchBox = (EditText) rootView.findViewById(R.id.search_artists);
         mArtistSearchBox.addTextChangedListener(new ArtistSearchTextWatcher());
 
+
+
         return rootView;
     }
 
