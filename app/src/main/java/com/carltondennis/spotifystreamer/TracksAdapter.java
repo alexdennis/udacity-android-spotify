@@ -12,18 +12,18 @@ import android.widget.TextView;
 import com.squareup.picasso.Picasso;
 
 /**
- * Created by alex on 5/30/15.
+ * Created by alex on 6/2/15.
  */
-public class ArtistsAdapter extends CursorAdapter {
+public class TracksAdapter extends CursorAdapter {
 
-    public ArtistsAdapter(Context context, Cursor c, int flags) {
+    public TracksAdapter(Context context, Cursor c, int flags) {
 
         super(context, c, flags);
     }
 
     @Override
     public View newView(Context context, Cursor cursor, ViewGroup parent) {
-        View view = LayoutInflater.from(context).inflate(R.layout.list_item_artist, parent, false);
+        View view = LayoutInflater.from(context).inflate(R.layout.list_item_tracks, parent, false);
         view.setTag(new ViewHolder(view));
         return view;
     }
@@ -33,10 +33,12 @@ public class ArtistsAdapter extends CursorAdapter {
 
         ViewHolder viewHolder = (ViewHolder) view.getTag();
 
-        String name = cursor.getString(MainActivityFragment.COL_ARTIST_NAME);
-        String image = cursor.getString(MainActivityFragment.COL_ARTIST_IMAGE);
+        String name  = cursor.getString(TracksActivityFragment.COL_TRACK_NAME);
+        String albumName = cursor.getString(TracksActivityFragment.COL_TRACK_ALBUM);
+        String image = cursor.getString(TracksActivityFragment.COL_TRACK_ALBUM_IMAGE_SMALL);
 
         viewHolder.nameView.setText(name);
+        viewHolder.albumNameView.setText(albumName);
         if (image != null) {
             Picasso.with(context).load(image).into(viewHolder.imageView);
         }
@@ -49,10 +51,12 @@ public class ArtistsAdapter extends CursorAdapter {
     public static class ViewHolder {
         public final ImageView imageView;
         public final TextView nameView;
+        public final TextView albumNameView;
 
         public ViewHolder(View view) {
-            imageView = (ImageView) view.findViewById(R.id.list_item_image_artist);
-            nameView = (TextView) view.findViewById(R.id.list_item_name_artist);
+            imageView = (ImageView) view.findViewById(R.id.list_item_image_album);
+            nameView = (TextView) view.findViewById(R.id.list_item_name_track);
+            albumNameView = (TextView) view.findViewById(R.id.list_item_name_album);
         }
     }
 }

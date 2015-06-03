@@ -1,6 +1,8 @@
 package com.carltondennis.spotifystreamer;
 
 import android.app.Fragment;
+import android.content.Intent;
+import android.database.Cursor;
 import android.database.MatrixCursor;
 import android.os.AsyncTask;
 import android.os.Bundle;
@@ -10,6 +12,7 @@ import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.AdapterView;
 import android.widget.EditText;
 import android.widget.ListView;
 import android.widget.Toast;
@@ -18,6 +21,7 @@ import kaaes.spotify.webapi.android.SpotifyApi;
 import kaaes.spotify.webapi.android.SpotifyService;
 import kaaes.spotify.webapi.android.models.Artist;
 import kaaes.spotify.webapi.android.models.ArtistsPager;
+import kaaes.spotify.webapi.android.models.Image;
 import retrofit.RetrofitError;
 
 
@@ -26,7 +30,7 @@ import retrofit.RetrofitError;
  */
 public class MainActivityFragment extends Fragment {
 
-    private static final String TAG = MainActivityFragment.class.getCanonicalName();
+    private static final String TAG = MainActivityFragment.class.getSimpleName();
 
     private ArtistsAdapter mArtistsAdapter;
     private ListView mArtistsList;
@@ -44,6 +48,25 @@ public class MainActivityFragment extends Fragment {
         mArtistsAdapter = new ArtistsAdapter(getActivity(), null, 0);
         mArtistsList = (ListView) rootView.findViewById(R.id.artists_list);
         mArtistsList.setAdapter(mArtistsAdapter);
+        mArtistsList.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+            @Override
+            public void onItemClick(AdapterView<?> adapterView, View view, int position, long id) {
+                ArtistsAdapter adapter = (ArtistsAdapter) adapterView.getAdapter();
+                Cursor cursor = adapter.getCursor();
+
+                if (null != cursor && cursor.moveToPosition(position)) {
+//                    ((Callback) getActivity()).onItemSelected(cursor.getString(COL_WEATHER_DATE));
+//                    mPosition = position;
+                    Bundle extras = new Bundle();
+                    extras.putString(TracksActivityFragment.SPOTIFY_ID_KEY, cursor.getString(COL_ARTIST_SPOTIFY_ID));
+                    extras.putString(TracksActivityFragment.ARTIST_NAME_KEY, cursor.getString(COL_ARTIST_NAME));
+                    Intent intent = new Intent(getActivity(), TracksActivity.class)
+                            .putExtras(extras);
+                    startActivity(intent);
+                }
+            }
+        });
+
         mArtistSearchBox = (EditText) rootView.findViewById(R.id.search_artists);
         mArtistSearchBox.addTextChangedListener(new ArtistSearchTextWatcher());
 
@@ -73,8 +96,13 @@ public class MainActivityFragment extends Fragment {
             "_id",
             "image",
             "name",
-            "artist_id"
+            "spotify_id"
     };
+
+    public static final int COL_ARTIST_ID = 0;
+    public static final int COL_ARTIST_IMAGE = 1;
+    public static final int COL_ARTIST_NAME = 2;
+    public static final int COL_ARTIST_SPOTIFY_ID = 3;
 
     class FetchArtistsTask extends AsyncTask<String, Void, MatrixCursor> {
         @Override
@@ -100,7 +128,17 @@ public class MainActivityFragment extends Fragment {
                         Artist artist = results.artists.items.get(i);
                         String imageUrl = null;
                         if (artist.images.size() > 0) {
-                            imageUrl = artist.images.get(0).url;
+                            int size = 0;
+                            for (int j = 0; j < artist.images.size(); j++) {
+                                Image image = artist.images.get(j);
+                                if (size == 0 || image.height < size) {
+                                    size = image.height;
+                                }
+
+                                if (image.height >= 200 && image.height <= size) {
+                                    imageUrl = image.url;
+                                }
+                            }
                         }
                         cursor.addRow(new Object[] {i, imageUrl, artist.name, artist.id});
                     }
