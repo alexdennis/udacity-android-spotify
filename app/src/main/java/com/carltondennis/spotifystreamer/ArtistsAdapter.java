@@ -1,46 +1,62 @@
 package com.carltondennis.spotifystreamer;
 
 import android.content.Context;
-import android.database.Cursor;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.CursorAdapter;
+import android.widget.ArrayAdapter;
 import android.widget.ImageView;
 import android.widget.TextView;
 
 import com.squareup.picasso.Picasso;
 
+import java.util.ArrayList;
+
 /**
  * Created by alex on 5/30/15.
  */
-public class ArtistsAdapter extends CursorAdapter {
+public class ArtistsAdapter extends ArrayAdapter<SpotifyArtist> {
 
-    public ArtistsAdapter(Context context, Cursor c, int flags) {
+    private Context mContext;
+    private int mResource;
+    private ArrayList<SpotifyArtist> mItems;
 
-        super(context, c, flags);
+    public ArtistsAdapter(Context context, int resource, ArrayList<SpotifyArtist> items) {
+
+        super(context, resource, items);
+
+        mContext = context;
+        mResource = resource;
+        mItems = items;
     }
 
-    @Override
-    public View newView(Context context, Cursor cursor, ViewGroup parent) {
-        View view = LayoutInflater.from(context).inflate(R.layout.list_item_artist, parent, false);
-        view.setTag(new ViewHolder(view));
-        return view;
+    public ArrayList<SpotifyArtist> getArtists() {
+        return mItems;
     }
 
+
     @Override
-    public void bindView(View view, Context context, Cursor cursor) {
+    public View getView(int position, View convertView, ViewGroup parent) {
+        View view = convertView;
+        ViewHolder viewHolder;
 
-        ViewHolder viewHolder = (ViewHolder) view.getTag();
-
-        String name = cursor.getString(MainActivityFragment.COL_ARTIST_NAME);
-        String image = cursor.getString(MainActivityFragment.COL_ARTIST_IMAGE);
-
-        viewHolder.nameView.setText(name);
-        if (image != null) {
-            Picasso.with(context).load(image).into(viewHolder.imageView);
+        if (view == null) {
+            view = LayoutInflater.from(mContext).inflate(mResource, parent, false);
+            viewHolder = new ViewHolder(view);
+            view.setTag(viewHolder);
+        } else {
+            viewHolder = (ViewHolder) view.getTag();
         }
 
+        SpotifyArtist artist = getItem(position);
+        viewHolder.nameView.setText(artist.name);
+        if (artist.imageURL != null) {
+            Picasso.with(mContext).load(artist.imageURL).into(viewHolder.imageView);
+        } else {
+            Picasso.with(mContext).load(R.drawable.ic_social_person).into(viewHolder.imageView);
+        }
+
+        return view;
     }
 
     /**

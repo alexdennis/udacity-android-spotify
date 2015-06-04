@@ -11,7 +11,8 @@
     <EditText
         android:id="@+id/search_artists"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content" />
+        android:layout_height="wrap_content"
+        android:singleLine="true"/>
 
     <ListView android:id="@+id/artists_list"
         android:layout_width="match_parent"

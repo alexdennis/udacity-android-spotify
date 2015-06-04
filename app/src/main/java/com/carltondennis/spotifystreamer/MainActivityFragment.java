@@ -2,8 +2,6 @@ package com.carltondennis.spotifystreamer;
 
 import android.app.Fragment;
 import android.content.Intent;
-import android.database.Cursor;
-import android.database.MatrixCursor;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.text.Editable;
@@ -15,7 +13,8 @@ import android.view.ViewGroup;
 import android.widget.AdapterView;
 import android.widget.EditText;
 import android.widget.ListView;
-import android.widget.Toast;
+
+import java.util.ArrayList;
 
 import kaaes.spotify.webapi.android.SpotifyApi;
 import kaaes.spotify.webapi.android.SpotifyService;
@@ -31,11 +30,11 @@ import retrofit.RetrofitError;
 public class MainActivityFragment extends Fragment {
 
     private static final String TAG = MainActivityFragment.class.getSimpleName();
+    private static final String QUERY_KEY = "query";
 
     private ArtistsAdapter mArtistsAdapter;
     private ListView mArtistsList;
     private EditText mArtistSearchBox;
-    private Toast mToast;
 
     public MainActivityFragment() {
     }
@@ -45,21 +44,25 @@ public class MainActivityFragment extends Fragment {
                              Bundle savedInstanceState) {
         View rootView =  inflater.inflate(R.layout.fragment_main, container, false);
 
-        mArtistsAdapter = new ArtistsAdapter(getActivity(), null, 0);
+        mArtistsAdapter = new ArtistsAdapter(getActivity(), R.layout.list_item_artist, new ArrayList<SpotifyArtist>());
         mArtistsList = (ListView) rootView.findViewById(R.id.artists_list);
         mArtistsList.setAdapter(mArtistsAdapter);
         mArtistsList.setOnItemClickListener(new AdapterView.OnItemClickListener() {
             @Override
             public void onItemClick(AdapterView<?> adapterView, View view, int position, long id) {
                 ArtistsAdapter adapter = (ArtistsAdapter) adapterView.getAdapter();
-                Cursor cursor = adapter.getCursor();
+                SpotifyArtist artist = adapter.getItem(position);
 
-                if (null != cursor && cursor.moveToPosition(position)) {
-//                    ((Callback) getActivity()).onItemSelected(cursor.getString(COL_WEATHER_DATE));
-//                    mPosition = position;
+                if (artist != null) {
                     Bundle extras = new Bundle();
-                    extras.putString(TracksActivityFragment.SPOTIFY_ID_KEY, cursor.getString(COL_ARTIST_SPOTIFY_ID));
-                    extras.putString(TracksActivityFragment.ARTIST_NAME_KEY, cursor.getString(COL_ARTIST_NAME));
+                    String spotifyId = artist.spotifyId;
+
+                    if (spotifyId == null || spotifyId.length() == 0) {
+                        return;
+                    }
+
+                    extras.putString(TracksActivityFragment.SPOTIFY_ID_KEY, spotifyId);
+                    extras.putString(TracksActivityFragment.ARTIST_NAME_KEY, artist.name);
                     Intent intent = new Intent(getActivity(), TracksActivity.class)
                             .putExtras(extras);
                     startActivity(intent);
@@ -69,8 +72,6 @@ public class MainActivityFragment extends Fragment {
 
         mArtistSearchBox = (EditText) rootView.findViewById(R.id.search_artists);
         mArtistSearchBox.addTextChangedListener(new ArtistSearchTextWatcher());
-
-
 
         return rootView;
     }
@@ -94,21 +95,9 @@ public class MainActivityFragment extends Fragment {
         }
     }
 
-    private static final String[] ARTIST_COLUMNS = {
-            "_id",
-            "image",
-            "name",
-            "spotify_id"
-    };
-
-    public static final int COL_ARTIST_ID = 0;
-    public static final int COL_ARTIST_IMAGE = 1;
-    public static final int COL_ARTIST_NAME = 2;
-    public static final int COL_ARTIST_SPOTIFY_ID = 3;
-
-    class FetchArtistsTask extends AsyncTask<String, Void, MatrixCursor> {
+    class FetchArtistsTask extends AsyncTask<String, Void, ArrayList<SpotifyArtist>> {
         @Override
-        protected MatrixCursor doInBackground(String... params) {
+        protected ArrayList<SpotifyArtist> doInBackground(String... params) {
 
             // we need an artist to search for
             if (params.length == 0) {
@@ -122,7 +111,7 @@ public class MainActivityFragment extends Fragment {
                 SpotifyApi api = new SpotifyApi();
                 SpotifyService spotify = api.getService();
                 ArtistsPager results = spotify.searchArtists(params[0]);
-                MatrixCursor cursor = new MatrixCursor(ARTIST_COLUMNS);
+                ArrayList<SpotifyArtist> displayArtists = new ArrayList<>();
 
                 int count = results.artists.items.size();
                 if ( count > 0 ) {
@@ -142,10 +131,10 @@ public class MainActivityFragment extends Fragment {
                                 }
                             }
                         }
-                        cursor.addRow(new Object[] {i, imageUrl, artist.name, artist.id});
+                        displayArtists.add(new SpotifyArtist(artist.name, imageUrl, artist.id));
                     }
 
-                    return cursor;
+                    return displayArtists;
                 }
 
             } catch (RetrofitError error) {
@@ -157,16 +146,12 @@ public class MainActivityFragment extends Fragment {
         }
 
         @Override
-        protected void onPostExecute(MatrixCursor result) {
+        protected void onPostExecute(ArrayList<SpotifyArtist> result) {
+            mArtistsAdapter.clear();
             if (result != null) {
-                mArtistsAdapter.swapCursor(result);
+                mArtistsAdapter.addAll(result);
             } else {
-                if (mToast != null) {
-                    mToast.cancel();
-                }
-
-                mToast = Toast.makeText(getActivity(), R.string.artists_not_found, Toast.LENGTH_SHORT);
-                mToast.show();
+                mArtistsAdapter.add(new SpotifyArtist(getString(R.string.artists_not_found), null, null));
             }
         }
     }

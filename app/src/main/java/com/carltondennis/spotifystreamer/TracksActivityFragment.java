@@ -2,7 +2,6 @@ package com.carltondennis.spotifystreamer;
 
 import android.app.Fragment;
 import android.content.Intent;
-import android.database.MatrixCursor;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.util.Log;
@@ -10,8 +9,8 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ListView;
-import android.widget.Toast;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 
 import kaaes.spotify.webapi.android.SpotifyApi;
@@ -32,9 +31,10 @@ public class TracksActivityFragment extends Fragment {
     public static final String SPOTIFY_ID_KEY = "spotify_id";
     public static final String ARTIST_NAME_KEY = "artist_name";
 
+    private static final String TRACKS_KEY = "tracks";
+
     private ListView mTracksList;
     private TracksAdapter mTracksAdapter;
-    private Toast mToast;
 
     public TracksActivityFragment() {
     }
@@ -44,7 +44,7 @@ public class TracksActivityFragment extends Fragment {
                              Bundle savedInstanceState) {
         View rootView = inflater.inflate(R.layout.fragment_tracks, container, false);
 
-        mTracksAdapter = new TracksAdapter(getActivity(), null, 0);
+        mTracksAdapter = new TracksAdapter(getActivity(), R.layout.list_item_tracks, new ArrayList<SpotifyTrack>());
         mTracksList = (ListView) rootView.findViewById(R.id.tracks_list);
         mTracksList.setAdapter(mTracksAdapter);
 
@@ -54,39 +54,44 @@ public class TracksActivityFragment extends Fragment {
     @Override
     public void onActivityCreated(Bundle savedInstanceState) {
         super.onActivityCreated(savedInstanceState);
+
         Intent intent = getActivity().getIntent();
         if (intent != null && intent.getExtras() != null && intent.getExtras().containsKey(SPOTIFY_ID_KEY)) {
+            boolean bLoadedFromCache = false;
             String spotifyId = intent.getExtras().getString(SPOTIFY_ID_KEY);
-            String albumName = intent.getExtras().getString(ARTIST_NAME_KEY);
 
-            getActivity().getActionBar().setSubtitle(albumName);
+            if (intent.getExtras().containsKey(ARTIST_NAME_KEY)) {
+                String albumName = intent.getExtras().getString(ARTIST_NAME_KEY);
+                getActivity().getActionBar().setSubtitle(albumName);
+            }
 
-            FetchTop10TracksTask tracksTask = new FetchTop10TracksTask();
-            tracksTask.execute(spotifyId);
+            if (savedInstanceState != null && savedInstanceState.containsKey(TRACKS_KEY)) {
+                ArrayList<SpotifyTrack> storedTracks = savedInstanceState.getParcelableArrayList(TRACKS_KEY);
+                if (storedTracks != null && storedTracks.size() > 0) {
+                    mTracksAdapter.addAll(storedTracks);
+                    bLoadedFromCache = true;
+                }
+            }
 
-//            getLoaderManager().initLoader(DETAIL_LOADER, null, this);
+            if (!bLoadedFromCache) {
+                FetchTop10TracksTask tracksTask = new FetchTop10TracksTask();
+                tracksTask.execute(spotifyId);
+            }
         }
     }
 
-    private static final String[] TRACK_COLUMNS = {
-            "_id",
-            "name",
-            "album",
-            "album_image_large",
-            "album_image_small",
-            "preview_url"
-    };
+    @Override
+    public void onSaveInstanceState(Bundle outState) {
+        super.onSaveInstanceState(outState);
 
-    public static final int COL_TRACK_ID = 0;
-    public static final int COL_TRACK_NAME = 1;
-    public static final int COL_TRACK_ALBUM = 2;
-    public static final int COL_TRACK_ALBUM_IMAGE_LARGE = 3;
-    public static final int COL_TRACK_ALBUM_IMAGE_SMALL = 4;
-    public static final int COL_TRACK_PREVIEW_URL = 5;
+        if (mTracksAdapter != null) {
+            outState.putParcelableArrayList(TRACKS_KEY, mTracksAdapter.getTracks());
+        }
+    }
 
-    class FetchTop10TracksTask extends AsyncTask<String, Void, MatrixCursor> {
+    class FetchTop10TracksTask extends AsyncTask<String, Void, ArrayList<SpotifyTrack>> {
         @Override
-        protected MatrixCursor doInBackground(String... params) {
+        protected ArrayList<SpotifyTrack> doInBackground(String... params) {
 
             // we need an spotify id to search for
             if (params.length == 0) {
@@ -104,7 +109,7 @@ public class TracksActivityFragment extends Fragment {
 
                 options.put("country", preferredCountry);
                 Tracks results = spotify.getArtistTopTrack(params[0], options);
-                MatrixCursor cursor = new MatrixCursor(TRACK_COLUMNS);
+                ArrayList<SpotifyTrack> spotifyTracks = new ArrayList<>();
 
                 int count = results.tracks.size();
                 if ( count > 0 ) {
@@ -122,10 +127,11 @@ public class TracksActivityFragment extends Fragment {
                                 }
                             }
                         }
-                        cursor.addRow(new Object[] {i, track.name, track.album.name, imageUrlLarge, imageUrlSmall, track.preview_url});
+
+                        spotifyTracks.add(new SpotifyTrack(track.name, track.album.name, imageUrlLarge, imageUrlSmall, track.preview_url));
                     }
 
-                    return cursor;
+                    return spotifyTracks;
                 }
 
             } catch (RetrofitError error) {
@@ -136,16 +142,11 @@ public class TracksActivityFragment extends Fragment {
         }
 
         @Override
-        protected void onPostExecute(MatrixCursor result) {
+        protected void onPostExecute(ArrayList<SpotifyTrack> result) {
             if (result != null) {
-                mTracksAdapter.swapCursor(result);
+                mTracksAdapter.addAll(result);
             } else {
-                if (mToast != null) {
-                    mToast.cancel();
-                }
-
-                mToast = Toast.makeText(getActivity(), R.string.tracks_not_found, Toast.LENGTH_SHORT);
-                mToast.show();
+                mTracksAdapter.add(new SpotifyTrack(getString(R.string.tracks_not_found), null, null, null, null));
             }
         }
     }
