@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:gravity="center_horizontal"
+    android:orientation="vertical"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:paddingLeft="@dimen/activity_horizontal_margin"
+    android:paddingRight="@dimen/activity_horizontal_margin"
+    android:paddingTop="@dimen/activity_vertical_margin"
+    android:paddingBottom="@dimen/activity_vertical_margin">
+
+    <TextView
+        android:id="@+id/player_artist"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        tools:text="Coldplay" />
+    <TextView
+        android:id="@+id/player_album"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        tools:text="Ghost Stories" />
+
+
+    <ImageView
+        android:id="@+id/player_album_image"
+        android:layout_width="@dimen/player_image_size"
+        android:layout_height="@dimen/player_image_size"
+        android:src="@drawable/ic_av_album" />
+
+    <TextView
+        android:id="@+id/player_track_name"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        tools:text="A Sky Full of Stars" />
+
+    <SeekBar
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:id="@+id/player_track_seek_bar" />
+
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <TextView
+            android:layout_alignParentLeft="true"
+            android:id="@+id/player_track_progress"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="0:00" />
+
+        <TextView
+            android:layout_alignParentRight="true"
+            android:id="@+id/player_track_duration"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            tools:text="0:30" />
+
+    </RelativeLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <ImageButton
+            android:layout_weight="1"
+            android:id="@+id/player_btn_previous"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:src="@android:drawable/ic_media_previous" />
+
+        <ImageButton
+            android:layout_weight="1"
+            android:id="@+id/player_btn_play"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:src="@android:drawable/ic_media_play"/>
+
+        <ImageButton
+            android:layout_weight="1"
+            android:id="@+id/player_btn_next"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:src="@android:drawable/ic_media_next"/>
+    </LinearLayout>
+
+</LinearLayout>

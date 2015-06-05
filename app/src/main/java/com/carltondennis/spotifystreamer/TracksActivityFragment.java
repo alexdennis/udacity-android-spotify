@@ -8,6 +8,7 @@ import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.AdapterView;
 import android.widget.ListView;
 
 import java.util.ArrayList;
@@ -35,6 +36,7 @@ public class TracksActivityFragment extends Fragment {
 
     private ListView mTracksList;
     private TracksAdapter mTracksAdapter;
+    private String mArtistName;
 
     public TracksActivityFragment() {
     }
@@ -47,6 +49,23 @@ public class TracksActivityFragment extends Fragment {
         mTracksAdapter = new TracksAdapter(getActivity(), R.layout.list_item_tracks, new ArrayList<SpotifyTrack>());
         mTracksList = (ListView) rootView.findViewById(R.id.tracks_list);
         mTracksList.setAdapter(mTracksAdapter);
+        mTracksList.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+            @Override
+            public void onItemClick(AdapterView<?> adapterView, View view, int position, long id) {
+                TracksAdapter adapter = (TracksAdapter) adapterView.getAdapter();
+                SpotifyTrack track = adapter.getItem(position);
+
+                if (track != null && track.previewURL != null) {
+                    Bundle extras = new Bundle();
+
+                    extras.putParcelable(PlayerActivityFragment.TRACK_KEY, track);
+                    extras.putString(PlayerActivityFragment.ARTIST_KEY, mArtistName);
+                    Intent intent = new Intent(getActivity(), PlayerActivity.class)
+                            .putExtras(extras);
+                    startActivity(intent);
+                }
+            }
+        });
 
         return rootView;
     }
@@ -61,8 +80,9 @@ public class TracksActivityFragment extends Fragment {
             String spotifyId = intent.getExtras().getString(SPOTIFY_ID_KEY);
 
             if (intent.getExtras().containsKey(ARTIST_NAME_KEY)) {
-                String albumName = intent.getExtras().getString(ARTIST_NAME_KEY);
-                getActivity().getActionBar().setSubtitle(albumName);
+                String artistName = intent.getExtras().getString(ARTIST_NAME_KEY);
+                mArtistName = artistName;
+                getActivity().getActionBar().setSubtitle(artistName);
             }
 
             if (savedInstanceState != null && savedInstanceState.containsKey(TRACKS_KEY)) {
@@ -118,12 +138,18 @@ public class TracksActivityFragment extends Fragment {
                         String imageUrlLarge = null, imageUrlSmall = null;
                         int imageCount = track.album.images.size();
                         if (imageCount > 0) {
+                            int maxHeight = 0;
+                            int minHeight = 0;
                             for (int j = 0; j < imageCount; j++) {
                                 Image image = track.album.images.get(j);
-                                if (image.height >= 640) {
+                                if (image.height > maxHeight) {
+                                    maxHeight = image.height;
                                     imageUrlLarge = image.url;
-                                } else if (image.height >= 200) {
+                                }
+
+                                if (minHeight == 0 || (image.height < minHeight && image.height >= 200)) {
                                     imageUrlSmall = image.url;
+                                    minHeight = image.height;
                                 }
                             }
                         }
