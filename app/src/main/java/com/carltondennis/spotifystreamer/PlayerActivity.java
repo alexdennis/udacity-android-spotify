@@ -5,6 +5,8 @@ import android.os.Bundle;
 import android.view.Menu;
 import android.view.MenuItem;
 
+import java.util.ArrayList;
+
 
 public class PlayerActivity extends Activity {
 
@@ -14,11 +16,13 @@ public class PlayerActivity extends Activity {
         setContentView(R.layout.activity_player);
 
         if (savedInstanceState == null) {
-            SpotifyTrack track = getIntent().getParcelableExtra(PlayerActivityFragment.TRACK_KEY);
+            ArrayList<SpotifyTrack> tracks = getIntent().getParcelableArrayListExtra(PlayerActivityFragment.TRACKS_KEY);
+            int trackIndex = getIntent().getIntExtra(PlayerActivityFragment.TRACK_KEY, 0);
             String artistName = getIntent().getStringExtra(PlayerActivityFragment.ARTIST_KEY);
 
             Bundle args = new Bundle();
-            args.putParcelable(PlayerActivityFragment.TRACK_KEY, track);
+            args.putParcelableArrayList(PlayerActivityFragment.TRACKS_KEY, tracks);
+            args.putInt(PlayerActivityFragment.TRACK_KEY, trackIndex);
             args.putString(PlayerActivityFragment.ARTIST_KEY, artistName);
 
             PlayerActivityFragment f = new PlayerActivityFragment();

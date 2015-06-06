@@ -53,17 +53,15 @@ public class TracksActivityFragment extends Fragment {
             @Override
             public void onItemClick(AdapterView<?> adapterView, View view, int position, long id) {
                 TracksAdapter adapter = (TracksAdapter) adapterView.getAdapter();
-                SpotifyTrack track = adapter.getItem(position);
 
-                if (track != null && track.previewURL != null) {
-                    Bundle extras = new Bundle();
+                Bundle extras = new Bundle();
+                extras.putParcelableArrayList(PlayerActivityFragment.TRACKS_KEY, adapter.getTracks());
+                extras.putInt(PlayerActivityFragment.TRACK_KEY, position);
+                extras.putString(PlayerActivityFragment.ARTIST_KEY, mArtistName);
+                Intent intent = new Intent(getActivity(), PlayerActivity.class)
+                        .putExtras(extras);
+                startActivity(intent);
 
-                    extras.putParcelable(PlayerActivityFragment.TRACK_KEY, track);
-                    extras.putString(PlayerActivityFragment.ARTIST_KEY, mArtistName);
-                    Intent intent = new Intent(getActivity(), PlayerActivity.class)
-                            .putExtras(extras);
-                    startActivity(intent);
-                }
             }
         });
 

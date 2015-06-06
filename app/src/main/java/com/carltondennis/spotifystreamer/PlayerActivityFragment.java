@@ -24,6 +24,7 @@ import com.squareup.picasso.Callback;
 import com.squareup.picasso.Picasso;
 
 import java.io.IOException;
+import java.util.ArrayList;
 
 
 /**
@@ -34,7 +35,11 @@ public class PlayerActivityFragment extends Fragment {
     private static final String TAG = PlayerActivityFragment.class.getSimpleName();
 
     public static final String TRACK_KEY = "track";
+    public static final String TRACKS_KEY = "tracks";
     public static final String ARTIST_KEY = "artist";
+    public static final String TRACK_SEEK_KEY = "track_seek_pos";
+
+    private static int SECOND_IN_MILLISECONDS = 1000;
 
 
     private TextView mAlbumView;
@@ -51,6 +56,8 @@ public class PlayerActivityFragment extends Fragment {
     private MediaPlayer mMediaPlayer;
     private Handler mHandler = new Handler();
     private Toast mToast;
+    private ArrayList<SpotifyTrack> mTracks;
+    private int mCurrentTrackPosition = -1;
 
     public PlayerActivityFragment() {
     }
@@ -66,7 +73,7 @@ public class PlayerActivityFragment extends Fragment {
                 mTrackSeekBar.setProgress(currentDuration);
 
                 // Running this thread after 1000 milliseconds
-                mHandler.postDelayed(this, 1000);
+                mHandler.postDelayed(this, SECOND_IN_MILLISECONDS);
             }
         }
     };
@@ -87,6 +94,18 @@ public class PlayerActivityFragment extends Fragment {
         mButtonPlayPause = (ImageButton) rootView.findViewById(R.id.player_btn_play);
         mButtonPrevious = (ImageButton) rootView.findViewById(R.id.player_btn_previous);
 
+        mButtonPrevious.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                playPrevious();
+            }
+        });
+        mButtonNext.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                playNext();
+            }
+        });
         mButtonPlayPause.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -109,8 +128,8 @@ public class PlayerActivityFragment extends Fragment {
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 if (mMediaPlayer != null && fromUser) {
                     mHandler.removeCallbacks(mUpdateTimeTask);
-                    mMediaPlayer.seekTo(progress * 1000);
-                    mHandler.postDelayed(mUpdateTimeTask, 1000);
+                    mMediaPlayer.seekTo(progress);
+                    mHandler.postDelayed(mUpdateTimeTask, SECOND_IN_MILLISECONDS);
                 }
             }
         });
@@ -119,18 +138,71 @@ public class PlayerActivityFragment extends Fragment {
 
     }
 
+    @Override
+    public void onActivityCreated(Bundle savedInstanceState) {
+        super.onActivityCreated(savedInstanceState);
+
+        if (savedInstanceState != null) {
+            if (savedInstanceState.containsKey(TRACKS_KEY) && savedInstanceState.containsKey(TRACK_KEY) && savedInstanceState.containsKey(TRACK_SEEK_KEY)) {
+                mTracks = savedInstanceState.getParcelableArrayList(TRACKS_KEY);
+                mCurrentTrackPosition = savedInstanceState.getInt(TRACK_KEY, 0);
+                int seekPos = savedInstanceState.getInt(TRACK_SEEK_KEY, 0);
+                prepareTrackAndPlay(seekPos);
+                return;
+            }
+        }
+
+        Intent intent = getActivity().getIntent();
+        if (intent != null) {
+            Bundle extras = intent.getExtras();
+            if (extras != null) {
+                if (extras.containsKey(ARTIST_KEY)) {
+                    mArtistView.setText(extras.getString(ARTIST_KEY));
+                }
+
+                if (extras.containsKey(TRACK_KEY) && extras.containsKey(TRACKS_KEY)) {
+                    mTracks = extras.getParcelableArrayList(TRACKS_KEY);
+                    mCurrentTrackPosition = extras.getInt(TRACK_KEY);
+                    prepareTrackAndPlay();
+                }
+
+
+            }
+        }
+    }
+
+    @Override
+    public void onSaveInstanceState(Bundle outState) {
+        super.onSaveInstanceState(outState);
+
+        if (mTracks != null) {
+            outState.putParcelableArrayList(TRACKS_KEY, mTracks);
+        }
+        outState.putInt(TRACK_KEY, mCurrentTrackPosition);
+        if (mMediaPlayer != null) {
+            outState.putInt(TRACK_SEEK_KEY, mMediaPlayer.getCurrentPosition());
+        }
+    }
+
+    @Override
+    public void onDestroy() {
+        super.onDestroy();
+        mMediaPlayer.release();
+        mMediaPlayer = null;
+    }
+
 
     private void togglePlayback()
     {
         if (mMediaPlayer != null) {
             if (mMediaPlayer.isPlaying()) {
-                mButtonPlayPause.setImageResource(android.R.drawable.ic_media_pause);
+                mButtonPlayPause.setImageResource(android.R.drawable.ic_media_play);
                 mMediaPlayer.pause();
                 mHandler.removeCallbacks(mUpdateTimeTask);
             } else {
                 mMediaPlayer.start();
-                mButtonPlayPause.setImageResource(android.R.drawable.ic_media_play);
-                mHandler.postDelayed(mUpdateTimeTask, 1000);
+                mButtonPlayPause.setImageResource(android.R.drawable.ic_media_pause);
+                mHandler.postDelayed(mUpdateTimeTask, SECOND_IN_MILLISECONDS);
             }
         }
 
@@ -138,23 +210,69 @@ public class PlayerActivityFragment extends Fragment {
 
     private void playNext()
     {
-
+        mCurrentTrackPosition++;
+        // play next track unless we are at the end of the list.
+        if (mCurrentTrackPosition >= mTracks.size()) {
+            mCurrentTrackPosition = mTracks.size() - 1;
+        } else {
+            prepareTrackAndPlay();
+        }
     }
 
     private void playPrevious()
     {
+        // Restart track if its been playing for more than a second.
+        if (mMediaPlayer != null && mMediaPlayer.isPlaying()) {
+            int currentSeekPos = mMediaPlayer.getCurrentPosition();
+            if (currentSeekPos >= SECOND_IN_MILLISECONDS) {
+                mMediaPlayer.reset();
+                mMediaPlayer.start();
+                return;
+            }
+        }
 
+        mCurrentTrackPosition--;
+        if (mCurrentTrackPosition < 0) {
+            mCurrentTrackPosition = 0;
+        }
+        prepareTrackAndPlay();
     }
 
     private String milliSecondsToTime(int milliSeconds)
     {
-        int minutes = (milliSeconds / 1000) / 60;
-        int seconds = (milliSeconds / 1000) % 60;
+        int minutes = (milliSeconds / SECOND_IN_MILLISECONDS) / 60;
+        int seconds = (milliSeconds / SECOND_IN_MILLISECONDS) % 60;
         return String.format("%d:%02d", minutes, seconds);
     }
 
-    private void prepareTrackAndPlay(SpotifyTrack track)
+    private void toastFailedPlayback()
     {
+        if (mToast != null) {
+            mToast.cancel();
+        }
+
+        mToast = Toast.makeText(getActivity(), R.string.failed_playback, Toast.LENGTH_SHORT);
+        mToast.show();
+    }
+
+    private void prepareTrackAndPlay()
+    {
+        prepareTrackAndPlay(0);
+    }
+
+    private void prepareTrackAndPlay(int seekPos)
+    {
+        if (mCurrentTrackPosition < 0 || mCurrentTrackPosition >= mTracks.size()) {
+            toastFailedPlayback();
+            return;
+        }
+
+        SpotifyTrack track = mTracks.get(mCurrentTrackPosition);
+        if (track == null) {
+            toastFailedPlayback();
+            return;
+        }
+
         mAlbumView.setText(track.albumName);
         mTrackView.setText(track.name);
         Picasso.with(getActivity())
@@ -182,48 +300,42 @@ public class PlayerActivityFragment extends Fragment {
                 });
 
 
+        if (mMediaPlayer != null) {
+            mMediaPlayer.release();
+            mMediaPlayer = null;
+        }
+
         mMediaPlayer = new MediaPlayer();
         mMediaPlayer.setAudioStreamType(AudioManager.STREAM_MUSIC);
+        mMediaPlayer.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
+            @Override
+            public void onCompletion(MediaPlayer mp) {
+                mTrackProgressView.setText(milliSecondsToTime(mp.getCurrentPosition()));
+                playNext();
+            }
+        });
 
         try {
-            mMediaPlayer.setDataSource(track.previewURL);
-            mMediaPlayer.prepare(); // might take long! (for buffering, etc)
-            togglePlayback();
+            if (track.previewURL != null && track.previewURL.length() > 0) {
+                Log.d(TAG, "Preparing source: " + track.previewURL);
+                mMediaPlayer.setDataSource(track.previewURL);
+                mMediaPlayer.prepare(); // might take long! (for buffering, etc)
+                if (seekPos > 0) {
+                    mMediaPlayer.seekTo(seekPos);
+                }
+                togglePlayback();
 
-            int duration = mMediaPlayer.getDuration();
-            mTrackDurationView.setText(milliSecondsToTime(duration));
-            mTrackSeekBar.setMax(duration);
+                int duration = mMediaPlayer.getDuration();
+                mTrackDurationView.setText(milliSecondsToTime(duration));
+                mTrackSeekBar.setMax(duration);
+            } else {
+                toastFailedPlayback();
+            }
 
         } catch (IOException ioex) {
             Log.d(TAG, ioex.getMessage());
-
-            if (mToast != null) {
-                mToast.cancel();
-            }
-
-            mToast = Toast.makeText(getActivity(), R.string.failed_playback, Toast.LENGTH_SHORT);
-            mToast.show();
+            toastFailedPlayback();
         }
     }
 
-    @Override
-    public void onActivityCreated(Bundle savedInstanceState) {
-        super.onActivityCreated(savedInstanceState);
-
-        Intent intent = getActivity().getIntent();
-        if (intent != null && intent.getExtras() != null && intent.getExtras().containsKey(TRACK_KEY)) {
-            SpotifyTrack track = intent.getExtras().getParcelable(TRACK_KEY);
-            String artist = intent.getExtras().getString(ARTIST_KEY);
-            mArtistView.setText(artist);
-
-            prepareTrackAndPlay(track);
-        }
-    }
-
-    @Override
-    public void onDestroy() {
-        super.onDestroy();
-        mMediaPlayer.release();
-        mMediaPlayer = null;
-    }
 }
