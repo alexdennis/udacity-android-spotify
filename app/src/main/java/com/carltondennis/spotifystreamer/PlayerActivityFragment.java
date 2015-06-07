@@ -1,7 +1,6 @@
 package com.carltondennis.spotifystreamer;
 
-import android.app.Fragment;
-import android.content.Intent;
+import android.app.DialogFragment;
 import android.content.res.ColorStateList;
 import android.graphics.Bitmap;
 import android.graphics.drawable.BitmapDrawable;
@@ -30,7 +29,7 @@ import java.util.ArrayList;
 /**
  * A placeholder fragment containing a simple view.
  */
-public class PlayerActivityFragment extends Fragment {
+public class PlayerActivityFragment extends DialogFragment {
 
     private static final String TAG = PlayerActivityFragment.class.getSimpleName();
 
@@ -40,7 +39,6 @@ public class PlayerActivityFragment extends Fragment {
     public static final String TRACK_SEEK_KEY = "track_seek_pos";
 
     private static int SECOND_IN_MILLISECONDS = 1000;
-
 
     private TextView mAlbumView;
     private TextView mArtistView;
@@ -60,6 +58,17 @@ public class PlayerActivityFragment extends Fragment {
     private int mCurrentTrackPosition = -1;
 
     public PlayerActivityFragment() {
+    }
+
+    public static PlayerActivityFragment newInstance(ArrayList<SpotifyTrack> tracks, int trackIndex, String artistName) {
+        Bundle args = new Bundle();
+        args.putParcelableArrayList(PlayerActivityFragment.TRACKS_KEY, tracks);
+        args.putInt(PlayerActivityFragment.TRACK_KEY, trackIndex);
+        args.putString(PlayerActivityFragment.ARTIST_KEY, artistName);
+
+        PlayerActivityFragment f = new PlayerActivityFragment();
+        f.setArguments(args);
+        return f;
     }
 
     /**
@@ -141,32 +150,25 @@ public class PlayerActivityFragment extends Fragment {
     @Override
     public void onActivityCreated(Bundle savedInstanceState) {
         super.onActivityCreated(savedInstanceState);
+        int seekPos = 0;
 
-        if (savedInstanceState != null) {
-            if (savedInstanceState.containsKey(TRACKS_KEY) && savedInstanceState.containsKey(TRACK_KEY) && savedInstanceState.containsKey(TRACK_SEEK_KEY)) {
-                mTracks = savedInstanceState.getParcelableArrayList(TRACKS_KEY);
-                mCurrentTrackPosition = savedInstanceState.getInt(TRACK_KEY, 0);
-                int seekPos = savedInstanceState.getInt(TRACK_SEEK_KEY, 0);
-                prepareTrackAndPlay(seekPos);
-                return;
+        Bundle args = getArguments();
+        if (args != null) {
+            if (args.containsKey(ARTIST_KEY)) {
+                mArtistView.setText(args.getString(ARTIST_KEY));
             }
-        }
 
-        Intent intent = getActivity().getIntent();
-        if (intent != null) {
-            Bundle extras = intent.getExtras();
-            if (extras != null) {
-                if (extras.containsKey(ARTIST_KEY)) {
-                    mArtistView.setText(extras.getString(ARTIST_KEY));
+            if (args.containsKey(TRACK_KEY) && args.containsKey(TRACKS_KEY)) {
+                mTracks = args.getParcelableArrayList(TRACKS_KEY);
+
+                if (savedInstanceState != null && savedInstanceState.containsKey(TRACK_KEY) && savedInstanceState.containsKey(TRACK_SEEK_KEY)) {
+                    mCurrentTrackPosition = savedInstanceState.getInt(TRACK_KEY, 0);
+                    seekPos = savedInstanceState.getInt(TRACK_SEEK_KEY, 0);
+                } else {
+                    mCurrentTrackPosition = args.getInt(TRACK_KEY);
                 }
 
-                if (extras.containsKey(TRACK_KEY) && extras.containsKey(TRACKS_KEY)) {
-                    mTracks = extras.getParcelableArrayList(TRACKS_KEY);
-                    mCurrentTrackPosition = extras.getInt(TRACK_KEY);
-                    prepareTrackAndPlay();
-                }
-
-
+                prepareTrackAndPlay(seekPos);
             }
         }
     }
@@ -174,10 +176,7 @@ public class PlayerActivityFragment extends Fragment {
     @Override
     public void onSaveInstanceState(Bundle outState) {
         super.onSaveInstanceState(outState);
-
-        if (mTracks != null) {
-            outState.putParcelableArrayList(TRACKS_KEY, mTracks);
-        }
+        
         outState.putInt(TRACK_KEY, mCurrentTrackPosition);
         if (mMediaPlayer != null) {
             outState.putInt(TRACK_SEEK_KEY, mMediaPlayer.getCurrentPosition());
@@ -187,10 +186,11 @@ public class PlayerActivityFragment extends Fragment {
     @Override
     public void onDestroy() {
         super.onDestroy();
-        mMediaPlayer.release();
-        mMediaPlayer = null;
+        if (mMediaPlayer != null) {
+            mMediaPlayer.release();
+            mMediaPlayer = null;
+        }
     }
-
 
     private void togglePlayback()
     {
@@ -221,11 +221,11 @@ public class PlayerActivityFragment extends Fragment {
 
     private void playPrevious()
     {
-        // Restart track if its been playing for more than a second.
+        // Restart track if its been playing for more than a 5 seconds.
         if (mMediaPlayer != null && mMediaPlayer.isPlaying()) {
             int currentSeekPos = mMediaPlayer.getCurrentPosition();
-            if (currentSeekPos >= SECOND_IN_MILLISECONDS) {
-                mMediaPlayer.reset();
+            if (currentSeekPos >= (SECOND_IN_MILLISECONDS * 5)) {
+                mMediaPlayer.seekTo(0);
                 mMediaPlayer.start();
                 return;
             }
@@ -284,16 +284,11 @@ public class PlayerActivityFragment extends Fragment {
                         Bitmap bitmap = ((BitmapDrawable) mAlbumImageView.getDrawable()).getBitmap(); // Ew!
                         Palette palette = PaletteTransformation.getPalette(bitmap);
 
-                        int foreground = palette.getDarkVibrantColor(0xFFFFFF);
-                        int background = palette.getLightVibrantColor(0xCCCCCC);
+                        int foreground = palette.getDarkVibrantColor(0x000000);
 
-                        getView().setBackgroundColor(background);
                         mButtonPlayPause.setColorFilter(foreground);
-                        mButtonPlayPause.setBackgroundColor(background);
                         mButtonNext.setColorFilter(foreground);
-                        mButtonNext.setBackgroundColor(background);
                         mButtonPrevious.setColorFilter(foreground);
-                        mButtonPrevious.setBackgroundColor(background);
                         mTrackSeekBar.setProgressTintList(ColorStateList.valueOf(foreground));
                         mTrackSeekBar.setThumbTintList(ColorStateList.valueOf(foreground));
                     }
@@ -310,7 +305,6 @@ public class PlayerActivityFragment extends Fragment {
         mMediaPlayer.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
             @Override
             public void onCompletion(MediaPlayer mp) {
-                mTrackProgressView.setText(milliSecondsToTime(mp.getCurrentPosition()));
                 playNext();
             }
         });

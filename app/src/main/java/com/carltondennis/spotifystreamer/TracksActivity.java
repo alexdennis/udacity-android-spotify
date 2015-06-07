@@ -6,8 +6,11 @@ import android.os.Bundle;
 import android.view.Menu;
 import android.view.MenuItem;
 
+import java.util.ArrayList;
 
-public class TracksActivity extends Activity {
+
+public class TracksActivity extends Activity implements TracksActivityFragment.Callback {
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -16,19 +19,14 @@ public class TracksActivity extends Activity {
 
         if (savedInstanceState == null) {
             String spotifyId = getIntent().getStringExtra(TracksActivityFragment.SPOTIFY_ID_KEY);
-
-            Bundle args = new Bundle();
-            args.putString(TracksActivityFragment.SPOTIFY_ID_KEY, spotifyId);
-
-            TracksActivityFragment f = new TracksActivityFragment();
-            f.setArguments(args);
+            String artistName = getIntent().getStringExtra(TracksActivityFragment.ARTIST_NAME_KEY);
+            TracksActivityFragment f = TracksActivityFragment.newInstance(spotifyId, artistName);
 
             getFragmentManager().beginTransaction()
-                    .add(R.id.tracks_detail_container, f)
+                    .replace(R.id.tracks_detail_container, f)
                     .commit();
         }
     }
-
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
@@ -51,5 +49,15 @@ public class TracksActivity extends Activity {
         }
 
         return super.onOptionsItemSelected(item);
+    }
+
+    public void onTrackSelected(ArrayList<SpotifyTrack> tracks, int trackIndex, String artistName) {
+        Bundle extras = new Bundle();
+        extras.putParcelableArrayList(PlayerActivityFragment.TRACKS_KEY, tracks);
+        extras.putInt(PlayerActivityFragment.TRACK_KEY, trackIndex);
+        extras.putString(PlayerActivityFragment.ARTIST_KEY, artistName);
+        Intent intent = new Intent(this, PlayerActivity.class)
+                .putExtras(extras);
+        startActivity(intent);
     }
 }

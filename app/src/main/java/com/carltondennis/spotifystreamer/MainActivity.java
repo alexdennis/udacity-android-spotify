@@ -6,13 +6,29 @@ import android.os.Bundle;
 import android.view.Menu;
 import android.view.MenuItem;
 
+import java.util.ArrayList;
 
-public class MainActivity extends Activity {
+
+public class MainActivity extends Activity implements MainActivityFragment.Callback, TracksActivityFragment.Callback {
+
+    private boolean mTwoPane;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
+
+        if (findViewById(R.id.fragment_tracks) != null) {
+            mTwoPane = true;
+        } else {
+            mTwoPane = false;
+        }
+    }
+
+    public boolean isTwoPane()
+    {
+        return mTwoPane;
     }
 
 
@@ -36,5 +52,36 @@ public class MainActivity extends Activity {
         }
 
         return super.onOptionsItemSelected(item);
+    }
+
+    @Override
+    public void onArtistSelected(SpotifyArtist artist) {
+
+        Bundle extras = new Bundle();
+        String spotifyId = artist.spotifyId;
+
+        if (spotifyId == null || spotifyId.length() == 0) {
+            return;
+        }
+
+        extras.putString(TracksActivityFragment.SPOTIFY_ID_KEY, spotifyId);
+        extras.putString(TracksActivityFragment.ARTIST_NAME_KEY, artist.name);
+
+        if (!isTwoPane()) {
+            Intent intent = new Intent(this, TracksActivity.class)
+                    .putExtras(extras);
+            startActivity(intent);
+        } else {
+            TracksActivityFragment fragment = new TracksActivityFragment();
+            fragment.setArguments(extras);
+            getFragmentManager().beginTransaction()
+                    .replace(R.id.fragment_tracks, fragment)
+                    .commit();
+        }
+    }
+
+    public void onTrackSelected(ArrayList<SpotifyTrack> tracks, int trackIndex, String artistName) {
+        PlayerActivityFragment fragment = PlayerActivityFragment.newInstance(tracks, trackIndex, artistName);
+        fragment.show(getFragmentManager(), "dialog");
     }
 }

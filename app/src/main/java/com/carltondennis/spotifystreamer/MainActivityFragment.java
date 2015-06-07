@@ -1,7 +1,6 @@
 package com.carltondennis.spotifystreamer;
 
 import android.app.Fragment;
-import android.content.Intent;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.text.Editable;
@@ -31,10 +30,12 @@ public class MainActivityFragment extends Fragment {
 
     private static final String TAG = MainActivityFragment.class.getSimpleName();
     private static final String QUERY_KEY = "query";
+    private static final String POSITION_KEY = "pos";
 
     private ArtistsAdapter mArtistsAdapter;
     private ListView mArtistsList;
     private EditText mArtistSearchBox;
+    private int mPosition;
 
     public MainActivityFragment() {
     }
@@ -54,18 +55,8 @@ public class MainActivityFragment extends Fragment {
                 SpotifyArtist artist = adapter.getItem(position);
 
                 if (artist != null) {
-                    Bundle extras = new Bundle();
-                    String spotifyId = artist.spotifyId;
-
-                    if (spotifyId == null || spotifyId.length() == 0) {
-                        return;
-                    }
-
-                    extras.putString(TracksActivityFragment.SPOTIFY_ID_KEY, spotifyId);
-                    extras.putString(TracksActivityFragment.ARTIST_NAME_KEY, artist.name);
-                    Intent intent = new Intent(getActivity(), TracksActivity.class)
-                            .putExtras(extras);
-                    startActivity(intent);
+                    ((Callback) getActivity()).onArtistSelected(artist);
+                    mPosition = position;
                 }
             }
         });
@@ -73,7 +64,20 @@ public class MainActivityFragment extends Fragment {
         mArtistSearchBox = (EditText) rootView.findViewById(R.id.search_artists);
         mArtistSearchBox.addTextChangedListener(new ArtistSearchTextWatcher());
 
+        if (savedInstanceState != null && savedInstanceState.containsKey(POSITION_KEY)) {
+            mPosition = savedInstanceState.getInt(POSITION_KEY);
+        }
+
         return rootView;
+    }
+
+    @Override
+    public void onSaveInstanceState(Bundle outState) {
+        if (mPosition != ListView.INVALID_POSITION) {
+            outState.putInt(POSITION_KEY, mPosition);
+        }
+
+        super.onSaveInstanceState(outState);
     }
 
     class ArtistSearchTextWatcher implements TextWatcher {
@@ -93,6 +97,13 @@ public class MainActivityFragment extends Fragment {
                 artistsTask.execute(text);
             }
         }
+    }
+
+    public interface Callback {
+        /**
+         * Callback for when an item has been selected.
+         */
+        public void onArtistSelected(SpotifyArtist artist);
     }
 
     class FetchArtistsTask extends AsyncTask<String, Void, ArrayList<SpotifyArtist>> {

@@ -1,7 +1,6 @@
 package com.carltondennis.spotifystreamer;
 
 import android.app.Fragment;
-import android.content.Intent;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.util.Log;
@@ -41,6 +40,16 @@ public class TracksActivityFragment extends Fragment {
     public TracksActivityFragment() {
     }
 
+    public static TracksActivityFragment newInstance(String spotifyId, String artistName) {
+        Bundle args = new Bundle();
+        args.putString(TracksActivityFragment.SPOTIFY_ID_KEY, spotifyId);
+        args.putString(TracksActivityFragment.ARTIST_NAME_KEY, artistName);
+
+        TracksActivityFragment f = new TracksActivityFragment();
+        f.setArguments(args);
+        return f;
+    }
+
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
                              Bundle savedInstanceState) {
@@ -54,14 +63,11 @@ public class TracksActivityFragment extends Fragment {
             public void onItemClick(AdapterView<?> adapterView, View view, int position, long id) {
                 TracksAdapter adapter = (TracksAdapter) adapterView.getAdapter();
 
-                Bundle extras = new Bundle();
-                extras.putParcelableArrayList(PlayerActivityFragment.TRACKS_KEY, adapter.getTracks());
-                extras.putInt(PlayerActivityFragment.TRACK_KEY, position);
-                extras.putString(PlayerActivityFragment.ARTIST_KEY, mArtistName);
-                Intent intent = new Intent(getActivity(), PlayerActivity.class)
-                        .putExtras(extras);
-                startActivity(intent);
-
+                ((Callback) getActivity()).onTrackSelected(
+                        adapter.getTracks(),
+                        position,
+                        mArtistName
+                );
             }
         });
 
@@ -72,13 +78,13 @@ public class TracksActivityFragment extends Fragment {
     public void onActivityCreated(Bundle savedInstanceState) {
         super.onActivityCreated(savedInstanceState);
 
-        Intent intent = getActivity().getIntent();
-        if (intent != null && intent.getExtras() != null && intent.getExtras().containsKey(SPOTIFY_ID_KEY)) {
+        Bundle args = getArguments();
+        if (args != null && args.containsKey(SPOTIFY_ID_KEY)) {
             boolean bLoadedFromCache = false;
-            String spotifyId = intent.getExtras().getString(SPOTIFY_ID_KEY);
+            String spotifyId = args.getString(SPOTIFY_ID_KEY);
 
-            if (intent.getExtras().containsKey(ARTIST_NAME_KEY)) {
-                String artistName = intent.getExtras().getString(ARTIST_NAME_KEY);
+            if (args.containsKey(ARTIST_NAME_KEY)) {
+                String artistName = args.getString(ARTIST_NAME_KEY);
                 mArtistName = artistName;
                 getActivity().getActionBar().setSubtitle(artistName);
             }
@@ -105,6 +111,13 @@ public class TracksActivityFragment extends Fragment {
         if (mTracksAdapter != null) {
             outState.putParcelableArrayList(TRACKS_KEY, mTracksAdapter.getTracks());
         }
+    }
+
+    public interface Callback {
+        /**
+         * Callback for when an item has been selected.
+         */
+        public void onTrackSelected(ArrayList<SpotifyTrack> tracks, int trackIndex, String artistName);
     }
 
     class FetchTop10TracksTask extends AsyncTask<String, Void, ArrayList<SpotifyTrack>> {

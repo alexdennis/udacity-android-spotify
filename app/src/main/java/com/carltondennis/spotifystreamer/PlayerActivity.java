@@ -20,13 +20,7 @@ public class PlayerActivity extends Activity {
             int trackIndex = getIntent().getIntExtra(PlayerActivityFragment.TRACK_KEY, 0);
             String artistName = getIntent().getStringExtra(PlayerActivityFragment.ARTIST_KEY);
 
-            Bundle args = new Bundle();
-            args.putParcelableArrayList(PlayerActivityFragment.TRACKS_KEY, tracks);
-            args.putInt(PlayerActivityFragment.TRACK_KEY, trackIndex);
-            args.putString(PlayerActivityFragment.ARTIST_KEY, artistName);
-
-            PlayerActivityFragment f = new PlayerActivityFragment();
-            f.setArguments(args);
+            PlayerActivityFragment f = PlayerActivityFragment.newInstance(tracks, trackIndex, artistName);
 
             getFragmentManager().beginTransaction()
                     .replace(R.id.player_container, f)
