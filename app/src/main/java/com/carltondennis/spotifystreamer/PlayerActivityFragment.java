@@ -1,13 +1,17 @@
 package com.carltondennis.spotifystreamer;
 
 import android.app.DialogFragment;
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.res.ColorStateList;
 import android.graphics.Bitmap;
 import android.graphics.drawable.BitmapDrawable;
-import android.media.AudioManager;
-import android.media.MediaPlayer;
+import android.media.session.PlaybackState;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.SystemClock;
 import android.support.v7.graphics.Palette;
 import android.util.Log;
 import android.view.LayoutInflater;
@@ -17,13 +21,15 @@ import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.SeekBar;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import com.squareup.picasso.Callback;
 import com.squareup.picasso.Picasso;
 
-import java.io.IOException;
 import java.util.ArrayList;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 
 
 /**
@@ -36,9 +42,9 @@ public class PlayerActivityFragment extends DialogFragment {
     public static final String TRACK_KEY = "track";
     public static final String TRACKS_KEY = "tracks";
     public static final String ARTIST_KEY = "artist";
-    public static final String TRACK_SEEK_KEY = "track_seek_pos";
 
-    private static int SECOND_IN_MILLISECONDS = 1000;
+    private static final long PROGRESS_UPDATE_INTERNAL = 1000;
+    private static final long PROGRESS_UPDATE_INITIAL_INTERVAL = 100;
 
     private TextView mAlbumView;
     private TextView mArtistView;
@@ -51,11 +57,12 @@ public class PlayerActivityFragment extends DialogFragment {
     private ImageButton mButtonNext;
     private ImageButton mButtonPlayPause;
 
-    private MediaPlayer mMediaPlayer;
+
     private Handler mHandler = new Handler();
-    private Toast mToast;
     private ArrayList<SpotifyTrack> mTracks;
-    private int mCurrentTrackPosition = -1;
+    private long mCurrentTrackQueueId = -1;
+    private int mState = PlaybackState.STATE_NONE;
+    private PlaybackState mLastPlaybackState;
 
     public PlayerActivityFragment() {
     }
@@ -73,19 +80,56 @@ public class PlayerActivityFragment extends DialogFragment {
 
     /**
      * Background Runnable thread
-     * */
+     */
     private Runnable mUpdateTimeTask = new Runnable() {
+        @Override
         public void run() {
-            if (mMediaPlayer != null && mMediaPlayer.isPlaying()) {
-                int currentDuration = mMediaPlayer.getCurrentPosition();
-                mTrackProgressView.setText(milliSecondsToTime(currentDuration));
-                mTrackSeekBar.setProgress(currentDuration);
-
-                // Running this thread after 1000 milliseconds
-                mHandler.postDelayed(this, SECOND_IN_MILLISECONDS);
-            }
+            updateProgress();
         }
     };
+
+    private final ScheduledExecutorService mExecutorService =
+            Executors.newSingleThreadScheduledExecutor();
+
+    private ScheduledFuture<?> mScheduleFuture;
+
+    private PlaybackUpdateReceiver mPlaybackUpdateReceiver = new PlaybackUpdateReceiver();
+    public class PlaybackUpdateReceiver extends BroadcastReceiver {
+
+        public static final String CUSTOM_INTENT = "com.carltondennis.spotifystreamer.intent.action.PLAYBACK_UPDATE";
+        public static final String PLAYBACK_KEY = "playbackUpate";
+        public static final String DURATION_KEY = "duration";
+
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (intent.getAction().equals(PlaybackUpdateReceiver.CUSTOM_INTENT)) {
+                Bundle extras = intent.getExtras();
+                mLastPlaybackState = extras.getParcelable(PLAYBACK_KEY);
+                long duration = extras.getLong(DURATION_KEY);
+
+                mState = mLastPlaybackState.getState();
+                updatePlayer(mLastPlaybackState, duration);
+                updateProgress();
+            }
+        }
+    }
+
+    private void updateProgress() {
+        if (mLastPlaybackState == null) {
+            return;
+        }
+        long currentPosition = mLastPlaybackState.getPosition();
+        if (mLastPlaybackState.getState() != PlaybackState.STATE_PAUSED) {
+            // Calculate the elapsed time between the last position update and now and unless
+            // paused, we can assume (delta * speed) + current position is approximately the
+            // latest position. This ensure that we do not repeatedly call the getPlaybackState()
+            // on MediaController.
+            long timeDelta = SystemClock.elapsedRealtime() -
+                    mLastPlaybackState.getLastPositionUpdateTime();
+            currentPosition += (int) timeDelta * mLastPlaybackState.getPlaybackSpeed();
+        }
+        mTrackSeekBar.setProgress((int) currentPosition);
+    }
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
@@ -106,40 +150,65 @@ public class PlayerActivityFragment extends DialogFragment {
         mButtonPrevious.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                playPrevious();
+                Intent intent = new Intent(getActivity(), PlaybackService.class);
+                intent.setAction(PlaybackService.ACTION_PREVIOUS);
+                getActivity().startService(intent);
             }
         });
         mButtonNext.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                playNext();
+                Intent intent = new Intent(getActivity(), PlaybackService.class);
+                intent.setAction(PlaybackService.ACTION_NEXT);
+                getActivity().startService(intent);
             }
         });
         mButtonPlayPause.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                togglePlayback();
+                Intent intent;
+                switch (mState) {
+                    case PlaybackState.STATE_PLAYING: // fall through
+                    case PlaybackState.STATE_BUFFERING:
+                        intent = new Intent(getActivity(), PlaybackService.class);
+                        intent.setAction(PlaybackService.ACTION_PAUSE);
+                        getActivity().startService(intent);
+                        stopSeekbarUpdate();
+                        mButtonPlayPause.setImageResource(android.R.drawable.ic_media_pause);
+                        break;
+                    case PlaybackState.STATE_PAUSED:
+                    case PlaybackState.STATE_STOPPED:
+                        intent = new Intent(getActivity(), PlaybackService.class);
+                        intent.setAction(PlaybackService.ACTION_PLAY);
+                        getActivity().startService(intent);
+                        scheduleSeekbarUpdate();
+                        mButtonPlayPause.setImageResource(android.R.drawable.ic_media_play);
+                        break;
+                    default:
+                        Log.d(TAG, String.format("onClick with state = %d", mState));
+                }
             }
         });
         mTrackSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
 
             @Override
-            public void onStopTrackingTouch(SeekBar seekBar) {
-
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                mTrackProgressView.setText(Utility.fromMillisecs(progress));
             }
 
             @Override
             public void onStartTrackingTouch(SeekBar seekBar) {
-
+                stopSeekbarUpdate();
             }
 
             @Override
-            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                if (mMediaPlayer != null && fromUser) {
-                    mHandler.removeCallbacks(mUpdateTimeTask);
-                    mMediaPlayer.seekTo(progress);
-                    mHandler.postDelayed(mUpdateTimeTask, SECOND_IN_MILLISECONDS);
-                }
+            public void onStopTrackingTouch(SeekBar seekBar) {
+
+                Intent intent = new Intent(getActivity(), PlaybackService.class);
+                intent.setAction(PlaybackService.ACTION_SEEK_TO);
+                intent.putExtra("seekPos", seekBar.getProgress());
+                getActivity().startService(intent);
+                scheduleSeekbarUpdate();
             }
         });
 
@@ -150,7 +219,6 @@ public class PlayerActivityFragment extends DialogFragment {
     @Override
     public void onActivityCreated(Bundle savedInstanceState) {
         super.onActivityCreated(savedInstanceState);
-        int seekPos = 0;
 
         Bundle args = getArguments();
         if (args != null) {
@@ -161,175 +229,101 @@ public class PlayerActivityFragment extends DialogFragment {
             if (args.containsKey(TRACK_KEY) && args.containsKey(TRACKS_KEY)) {
                 mTracks = args.getParcelableArrayList(TRACKS_KEY);
 
-                if (savedInstanceState != null && savedInstanceState.containsKey(TRACK_KEY) && savedInstanceState.containsKey(TRACK_SEEK_KEY)) {
-                    mCurrentTrackPosition = savedInstanceState.getInt(TRACK_KEY, 0);
-                    seekPos = savedInstanceState.getInt(TRACK_SEEK_KEY, 0);
-                } else {
-                    mCurrentTrackPosition = args.getInt(TRACK_KEY);
-                }
+//                if (savedInstanceState != null && savedInstanceState.containsKey(TRACK_KEY) && savedInstanceState.containsKey(TRACK_SEEK_KEY)) {
+//                    mCurrentTrackPosition = savedInstanceState.getInt(TRACK_KEY, 0);
+//                    seekPos = savedInstanceState.getInt(TRACK_SEEK_KEY, 0);
+//                } else {
+//                    mCurrentTrackPosition = args.getInt(TRACK_KEY);
+//                }
 
-                prepareTrackAndPlay(seekPos);
+                Intent intent = new Intent(getActivity(), PlaybackService.class);
+                intent.setAction(PlaybackService.ACTION_PLAY);
+                intent.putExtras(args);
+                getActivity().startService(intent);
+                scheduleSeekbarUpdate();
             }
         }
     }
 
-    @Override
-    public void onSaveInstanceState(Bundle outState) {
-        super.onSaveInstanceState(outState);
-        
-        outState.putInt(TRACK_KEY, mCurrentTrackPosition);
-        if (mMediaPlayer != null) {
-            outState.putInt(TRACK_SEEK_KEY, mMediaPlayer.getCurrentPosition());
+    private void scheduleSeekbarUpdate() {
+        stopSeekbarUpdate();
+        if (!mExecutorService.isShutdown()) {
+            mScheduleFuture = mExecutorService.scheduleAtFixedRate(
+                    new Runnable() {
+                        @Override
+                        public void run() {
+                            mHandler.post(mUpdateTimeTask);
+                        }
+                    }, PROGRESS_UPDATE_INITIAL_INTERVAL,
+                    PROGRESS_UPDATE_INTERNAL, TimeUnit.MILLISECONDS);
         }
+    }
+
+    private void stopSeekbarUpdate() {
+        if (mScheduleFuture != null) {
+            mScheduleFuture.cancel(false);
+        }
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        IntentFilter intentFilter = new IntentFilter(PlaybackUpdateReceiver.CUSTOM_INTENT);
+        getActivity().registerReceiver(mPlaybackUpdateReceiver, intentFilter);
+    }
+
+    @Override
+    public void onPause() {
+        super.onPause();
+        getActivity().unregisterReceiver(mPlaybackUpdateReceiver);
     }
 
     @Override
     public void onDestroy() {
         super.onDestroy();
-        if (mMediaPlayer != null) {
-            mMediaPlayer.release();
-            mMediaPlayer = null;
-        }
+        stopSeekbarUpdate();
+        mExecutorService.shutdown();
     }
 
-    private void togglePlayback()
-    {
-        if (mMediaPlayer != null) {
-            if (mMediaPlayer.isPlaying()) {
-                mButtonPlayPause.setImageResource(android.R.drawable.ic_media_play);
-                mMediaPlayer.pause();
-                mHandler.removeCallbacks(mUpdateTimeTask);
-            } else {
-                mMediaPlayer.start();
-                mButtonPlayPause.setImageResource(android.R.drawable.ic_media_pause);
-                mHandler.postDelayed(mUpdateTimeTask, SECOND_IN_MILLISECONDS);
-            }
-        }
+    private void updatePlayer(PlaybackState state, long duration) {
+        long queueId = state.getActiveQueueItemId();
 
-    }
-
-    private void playNext()
-    {
-        mCurrentTrackPosition++;
-        // play next track unless we are at the end of the list.
-        if (mCurrentTrackPosition >= mTracks.size()) {
-            mCurrentTrackPosition = mTracks.size() - 1;
-        } else {
-            prepareTrackAndPlay();
-        }
-    }
-
-    private void playPrevious()
-    {
-        // Restart track if its been playing for more than a 5 seconds.
-        if (mMediaPlayer != null && mMediaPlayer.isPlaying()) {
-            int currentSeekPos = mMediaPlayer.getCurrentPosition();
-            if (currentSeekPos >= (SECOND_IN_MILLISECONDS * 5)) {
-                mMediaPlayer.seekTo(0);
-                mMediaPlayer.start();
-                return;
-            }
-        }
-
-        mCurrentTrackPosition--;
-        if (mCurrentTrackPosition < 0) {
-            mCurrentTrackPosition = 0;
-        }
-        prepareTrackAndPlay();
-    }
-
-    private String milliSecondsToTime(int milliSeconds)
-    {
-        int minutes = (milliSeconds / SECOND_IN_MILLISECONDS) / 60;
-        int seconds = (milliSeconds / SECOND_IN_MILLISECONDS) % 60;
-        return String.format("%d:%02d", minutes, seconds);
-    }
-
-    private void toastFailedPlayback()
-    {
-        if (mToast != null) {
-            mToast.cancel();
-        }
-
-        mToast = Toast.makeText(getActivity(), R.string.failed_playback, Toast.LENGTH_SHORT);
-        mToast.show();
-    }
-
-    private void prepareTrackAndPlay()
-    {
-        prepareTrackAndPlay(0);
-    }
-
-    private void prepareTrackAndPlay(int seekPos)
-    {
-        if (mCurrentTrackPosition < 0 || mCurrentTrackPosition >= mTracks.size()) {
-            toastFailedPlayback();
+        if (queueId < 0 || queueId >= mTracks.size()) {
             return;
         }
 
-        SpotifyTrack track = mTracks.get(mCurrentTrackPosition);
-        if (track == null) {
-            toastFailedPlayback();
-            return;
+        if (mCurrentTrackQueueId != queueId) {
+            // Media changed
+            mCurrentTrackQueueId = queueId;
+
+            SpotifyTrack track = mTracks.get((int) mCurrentTrackQueueId);
+
+            mAlbumView.setText(track.albumName);
+            mTrackView.setText(track.name);
+            mTrackDurationView.setText(Utility.fromMillisecs((int) duration));
+            mTrackSeekBar.setMax((int) duration);
+            Picasso.with(getActivity())
+                    .load(track.imageLargeURL)
+                    .transform(PaletteTransformation.instance())
+                    .into(mAlbumImageView, new Callback.EmptyCallback() {
+                        @Override
+                        public void onSuccess() {
+                            Bitmap bitmap = ((BitmapDrawable) mAlbumImageView.getDrawable()).getBitmap(); // Ew!
+                            Palette palette = PaletteTransformation.getPalette(bitmap);
+
+                            int foreground = palette.getDarkVibrantColor(0x000000);
+
+                            mButtonPlayPause.setColorFilter(foreground);
+                            mButtonNext.setColorFilter(foreground);
+                            mButtonPrevious.setColorFilter(foreground);
+                            mTrackSeekBar.setProgressTintList(ColorStateList.valueOf(foreground));
+                            mTrackSeekBar.setThumbTintList(ColorStateList.valueOf(foreground));
+                        }
+                    });
         }
 
-        mAlbumView.setText(track.albumName);
-        mTrackView.setText(track.name);
-        Picasso.with(getActivity())
-                .load(track.imageLargeURL)
-                .transform(PaletteTransformation.instance())
-                .into(mAlbumImageView, new Callback.EmptyCallback() {
-                    @Override
-                    public void onSuccess() {
-                        Bitmap bitmap = ((BitmapDrawable) mAlbumImageView.getDrawable()).getBitmap(); // Ew!
-                        Palette palette = PaletteTransformation.getPalette(bitmap);
-
-                        int foreground = palette.getDarkVibrantColor(0x000000);
-
-                        mButtonPlayPause.setColorFilter(foreground);
-                        mButtonNext.setColorFilter(foreground);
-                        mButtonPrevious.setColorFilter(foreground);
-                        mTrackSeekBar.setProgressTintList(ColorStateList.valueOf(foreground));
-                        mTrackSeekBar.setThumbTintList(ColorStateList.valueOf(foreground));
-                    }
-                });
 
 
-        if (mMediaPlayer != null) {
-            mMediaPlayer.release();
-            mMediaPlayer = null;
-        }
-
-        mMediaPlayer = new MediaPlayer();
-        mMediaPlayer.setAudioStreamType(AudioManager.STREAM_MUSIC);
-        mMediaPlayer.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
-            @Override
-            public void onCompletion(MediaPlayer mp) {
-                playNext();
-            }
-        });
-
-        try {
-            if (track.previewURL != null && track.previewURL.length() > 0) {
-                Log.d(TAG, "Preparing source: " + track.previewURL);
-                mMediaPlayer.setDataSource(track.previewURL);
-                mMediaPlayer.prepare(); // might take long! (for buffering, etc)
-                if (seekPos > 0) {
-                    mMediaPlayer.seekTo(seekPos);
-                }
-                togglePlayback();
-
-                int duration = mMediaPlayer.getDuration();
-                mTrackDurationView.setText(milliSecondsToTime(duration));
-                mTrackSeekBar.setMax(duration);
-            } else {
-                toastFailedPlayback();
-            }
-
-        } catch (IOException ioex) {
-            Log.d(TAG, ioex.getMessage());
-            toastFailedPlayback();
-        }
     }
 
 }

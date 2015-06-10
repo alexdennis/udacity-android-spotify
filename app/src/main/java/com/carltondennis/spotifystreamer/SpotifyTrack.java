@@ -21,6 +21,10 @@ public class SpotifyTrack implements Parcelable {
         this.previewURL = previewURL;
     }
 
+    public boolean isPlayable() {
+        return this.previewURL != null && this.previewURL.length() > 0;
+    }
+
     public int describeContents() {
         return 0;
     }
