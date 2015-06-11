@@ -6,6 +6,8 @@ import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
+import android.graphics.Bitmap;
+import android.graphics.drawable.Drawable;
 import android.media.MediaPlayer;
 import android.media.session.PlaybackState;
 import android.os.Bundle;
@@ -13,6 +15,9 @@ import android.os.IBinder;
 import android.os.PowerManager;
 import android.os.SystemClock;
 import android.util.Log;
+
+import com.squareup.picasso.Picasso;
+import com.squareup.picasso.Target;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -32,15 +37,23 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
 
     public static final String SEEK_POS_KEY = "seek_pos";
 
+    private static final int NOTIFICATION_ID = 411;
+
     private MediaPlayer mMediaPlayer;
     private ArrayList<SpotifyTrack> mTracks;
     private int mTracksQueuePosition;
     private int mCurrentPosition;
     private int mState;
+    private NotificationManager mNotificationManager;
 
     @Override
     public IBinder onBind(Intent intent) {
         return null;
+    }
+
+    @Override
+    public void onCreate() {
+        mNotificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
     }
 
     private void handleIntent(Intent intent) {
@@ -106,34 +119,56 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
 
         if (mTracks == null || mTracksQueuePosition < 0 || mTracksQueuePosition > mTracks.size()) {
             return;
-
         }
         SpotifyTrack track = mTracks.get(mTracksQueuePosition);
 
         Intent intent = new Intent(getApplicationContext(), PlaybackService.class);
         intent.setAction(ACTION_STOP);
         PendingIntent pendingIntent = PendingIntent.getService(getApplicationContext(), 1, intent, 0);
-        Notification.Builder builder = new Notification.Builder(this)
+        final Notification.Builder builder = new Notification.Builder(this)
                 .setSmallIcon(R.mipmap.ic_launcher)
+                .setVisibility(Notification.VISIBILITY_PUBLIC)
                 .setContentTitle(track.name)
                 .setContentText(track.albumName)
+                .setContentIntent(createContentIntent())
                 .setDeleteIntent(pendingIntent)
                 .setStyle(style);
-
-//        try {
-//            Bitmap aBitmap = Picasso.with(getApplicationContext()).load(track.imageLargeURL).get();
-//            builder.setLargeIcon(aBitmap);
-//        } catch (IOException ioex) {
-//            Log.d(TAG, "Did not get bitmap for notification");
-//        }
 
         builder.addAction(generateAction(android.R.drawable.ic_media_previous, "Previous", ACTION_PREVIOUS));
         builder.addAction(action);
         builder.addAction(generateAction(android.R.drawable.ic_media_next, "Next", ACTION_NEXT));
-        style.setShowActionsInCompactView(0, 1, 2, 3, 4);
+        style.setShowActionsInCompactView(0, 1, 2);
 
-        NotificationManager notificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-        notificationManager.notify(1, builder.build());
+        Picasso.with(getApplicationContext())
+                .load(track.imageLargeURL)
+                .into(new Target() {
+                    @Override
+                    public void onBitmapLoaded(Bitmap bitmap, Picasso.LoadedFrom from) {
+                        // cache is now warmed up
+                        builder.setLargeIcon(bitmap);
+                        mNotificationManager.notify(NOTIFICATION_ID, builder.build());
+                    }
+
+                    @Override
+                    public void onBitmapFailed(Drawable errorDrawable) {
+                    }
+
+                    @Override
+                    public void onPrepareLoad(Drawable placeHolderDrawable) {
+                    }
+                });
+
+
+    }
+
+    private PendingIntent createContentIntent() {
+        Intent openUI = new Intent(getApplicationContext(), PlayerActivity.class);
+        openUI.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        openUI.putExtra(PlayerActivityFragment.TRACK_KEY, mTracksQueuePosition);
+        openUI.putExtra(PlayerActivityFragment.TRACKS_KEY, mTracks);
+        openUI.putExtra(PlayerActivityFragment.ARTIST_KEY, "Michael J");
+        return PendingIntent.getActivity(getApplicationContext(), 1, openUI,
+                PendingIntent.FLAG_CANCEL_CURRENT);
     }
 
     @Override
