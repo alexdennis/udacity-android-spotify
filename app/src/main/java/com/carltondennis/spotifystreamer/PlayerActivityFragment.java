@@ -42,6 +42,7 @@ public class PlayerActivityFragment extends DialogFragment {
     public static final String TRACK_KEY = "track";
     public static final String TRACKS_KEY = "tracks";
     public static final String ARTIST_KEY = "artist";
+    public static final String STATE_KEY  = "state";
 
     private static final long PROGRESS_UPDATE_INTERNAL = 1000;
     private static final long PROGRESS_UPDATE_INITIAL_INTERVAL = 100;
@@ -206,7 +207,9 @@ public class PlayerActivityFragment extends DialogFragment {
 
                 Intent intent = new Intent(getActivity(), PlaybackService.class);
                 intent.setAction(PlaybackService.ACTION_SEEK_TO);
-                intent.putExtra("seekPos", seekBar.getProgress());
+                Bundle extras = new Bundle();
+                extras.putInt(PlaybackService.SEEK_POS_KEY, seekBar.getProgress());
+                intent.putExtras(extras);
                 getActivity().startService(intent);
                 scheduleSeekbarUpdate();
             }
@@ -229,16 +232,19 @@ public class PlayerActivityFragment extends DialogFragment {
             if (args.containsKey(TRACK_KEY) && args.containsKey(TRACKS_KEY)) {
                 mTracks = args.getParcelableArrayList(TRACKS_KEY);
 
-//                if (savedInstanceState != null && savedInstanceState.containsKey(TRACK_KEY) && savedInstanceState.containsKey(TRACK_SEEK_KEY)) {
-//                    mCurrentTrackPosition = savedInstanceState.getInt(TRACK_KEY, 0);
-//                    seekPos = savedInstanceState.getInt(TRACK_SEEK_KEY, 0);
-//                } else {
-//                    mCurrentTrackPosition = args.getInt(TRACK_KEY);
-//                }
-
                 Intent intent = new Intent(getActivity(), PlaybackService.class);
-                intent.setAction(PlaybackService.ACTION_PLAY);
-                intent.putExtras(args);
+
+
+                if (savedInstanceState != null && savedInstanceState.containsKey(STATE_KEY)) {
+                    mState = savedInstanceState.getInt(STATE_KEY);
+                    intent.setAction(PlaybackService.ACTION_UPDATE_STATE);
+                } else {
+                    // First time this fragment is run since there is no state, so we
+                    // have to pass the new track list and queue position to the service
+                    intent.setAction(PlaybackService.ACTION_PLAY);
+                    intent.putExtras(args);
+                }
+
                 getActivity().startService(intent);
                 scheduleSeekbarUpdate();
             }
@@ -276,6 +282,12 @@ public class PlayerActivityFragment extends DialogFragment {
     public void onPause() {
         super.onPause();
         getActivity().unregisterReceiver(mPlaybackUpdateReceiver);
+    }
+
+    @Override
+    public void onSaveInstanceState(Bundle outState) {
+        super.onSaveInstanceState(outState);
+        outState.putInt(STATE_KEY, mState);
     }
 
     @Override

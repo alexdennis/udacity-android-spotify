@@ -48,6 +48,7 @@ public class MainActivityFragment extends Fragment {
         mArtistsAdapter = new ArtistsAdapter(getActivity(), R.layout.list_item_artist, new ArrayList<SpotifyArtist>());
         mArtistsList = (ListView) rootView.findViewById(R.id.artists_list);
         mArtistsList.setAdapter(mArtistsAdapter);
+        mArtistsList.setEmptyView(rootView.findViewById(R.id.artists_not_found));
         mArtistsList.setOnItemClickListener(new AdapterView.OnItemClickListener() {
             @Override
             public void onItemClick(AdapterView<?> adapterView, View view, int position, long id) {
@@ -57,6 +58,9 @@ public class MainActivityFragment extends Fragment {
                 if (artist != null) {
                     ((Callback) getActivity()).onArtistSelected(artist);
                     mPosition = position;
+//                    if (mPosition != ListView.INVALID_POSITION) {
+//                        mArtistsList.setSelection(position);
+//                    }
                 }
             }
         });
@@ -162,7 +166,7 @@ public class MainActivityFragment extends Fragment {
             if (result != null) {
                 mArtistsAdapter.addAll(result);
             } else {
-                mArtistsAdapter.add(new SpotifyArtist(getString(R.string.artists_not_found), null, null));
+                mArtistsAdapter.notifyDataSetChanged();
             }
         }
     }

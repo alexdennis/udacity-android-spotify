@@ -58,6 +58,7 @@ public class TracksActivityFragment extends Fragment {
         mTracksAdapter = new TracksAdapter(getActivity(), R.layout.list_item_tracks, new ArrayList<SpotifyTrack>());
         mTracksList = (ListView) rootView.findViewById(R.id.tracks_list);
         mTracksList.setAdapter(mTracksAdapter);
+        mTracksList.setEmptyView(rootView.findViewById(R.id.tracks_not_found));
         mTracksList.setOnItemClickListener(new AdapterView.OnItemClickListener() {
             @Override
             public void onItemClick(AdapterView<?> adapterView, View view, int position, long id) {
@@ -182,8 +183,6 @@ public class TracksActivityFragment extends Fragment {
         protected void onPostExecute(ArrayList<SpotifyTrack> result) {
             if (result != null) {
                 mTracksAdapter.addAll(result);
-            } else {
-                mTracksAdapter.add(new SpotifyTrack(getString(R.string.tracks_not_found), null, null, null, null));
             }
         }
     }

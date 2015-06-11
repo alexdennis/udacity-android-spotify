@@ -7,9 +7,6 @@ import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
 import android.media.MediaPlayer;
-import android.media.Rating;
-import android.media.session.MediaController;
-import android.media.session.MediaSession;
 import android.media.session.PlaybackState;
 import android.os.Bundle;
 import android.os.IBinder;
@@ -27,20 +24,19 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
 
     public static final String ACTION_PLAY = "action_play";
     public static final String ACTION_PAUSE = "action_pause";
-    public static final String ACTION_REWIND = "action_rewind";
-    public static final String ACTION_FAST_FORWARD = "action_fast_foward";
     public static final String ACTION_NEXT = "action_next";
     public static final String ACTION_PREVIOUS = "action_previous";
     public static final String ACTION_STOP = "action_stop";
     public static final String ACTION_SEEK_TO = "action_seek_to";
+    public static final String ACTION_UPDATE_STATE = "action_update_state";
+
+    public static final String SEEK_POS_KEY = "seek_pos";
 
     private MediaPlayer mMediaPlayer;
     private ArrayList<SpotifyTrack> mTracks;
     private int mTracksQueuePosition;
     private int mCurrentPosition;
     private int mState;
-    private MediaController mController;
-    private MediaSession mSession;
 
     @Override
     public IBinder onBind(Intent intent) {
@@ -56,21 +52,33 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
         String action = intent.getAction();
 
         if (action.equalsIgnoreCase(ACTION_PLAY)) {
-            mController.getTransportControls().play();
+            play();
+            buildNotification(generateAction(android.R.drawable.ic_media_pause, "Pause", ACTION_PAUSE));
+
         } else if (action.equalsIgnoreCase(ACTION_PAUSE)) {
-            mController.getTransportControls().pause();
-        } else if (action.equalsIgnoreCase(ACTION_FAST_FORWARD)) {
-            mController.getTransportControls().fastForward();
-        } else if (action.equalsIgnoreCase(ACTION_REWIND)) {
-            mController.getTransportControls().rewind();
+            pause();
+            buildNotification(generateAction(android.R.drawable.ic_media_play, "Play", ACTION_PLAY));
         } else if (action.equalsIgnoreCase(ACTION_PREVIOUS)) {
-            mController.getTransportControls().skipToPrevious();
+            skipToPrevious();
+            buildNotification(generateAction(android.R.drawable.ic_media_pause, "Pause", ACTION_PAUSE));
         } else if (action.equalsIgnoreCase(ACTION_NEXT)) {
-            mController.getTransportControls().skipToNext();
+            skipToNext();
+            buildNotification(generateAction(android.R.drawable.ic_media_pause, "Pause", ACTION_PAUSE));
         } else if (action.equalsIgnoreCase(ACTION_STOP)) {
-            mController.getTransportControls().stop();
+            stop();
+            NotificationManager notificationManager = (NotificationManager) getApplicationContext().getSystemService(Context.NOTIFICATION_SERVICE);
+            notificationManager.cancel(1);
+            stopSelf();
         } else if (action.equalsIgnoreCase(ACTION_SEEK_TO)) {
-            mController.getTransportControls().seekTo(intent.getLongExtra("seekPos", 0));
+            Bundle extras = intent.getExtras();
+            if (extras != null && extras.containsKey(SEEK_POS_KEY)) {
+                int pos = extras.getInt(SEEK_POS_KEY, 0);
+                if (pos != 0) {
+                    seekTo(pos);
+                }
+            }
+        } else if (action.equalsIgnoreCase(ACTION_UPDATE_STATE)) {
+            updatePlaybackState(null);
         }
     }
 
@@ -83,8 +91,6 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
                 mTracks = extras.getParcelableArrayList(PlayerActivityFragment.TRACKS_KEY);
                 mTracksQueuePosition = extras.getInt(PlayerActivityFragment.TRACK_KEY);
             }
-
-            initMediaSessions();
         }
     }
 
@@ -122,9 +128,7 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
 //        }
 
         builder.addAction(generateAction(android.R.drawable.ic_media_previous, "Previous", ACTION_PREVIOUS));
-//        builder.addAction(generateAction(android.R.drawable.ic_media_rew, "Rewind", ACTION_REWIND));
         builder.addAction(action);
-//        builder.addAction(generateAction(android.R.drawable.ic_media_ff, "Fast Foward", ACTION_FAST_FORWARD));
         builder.addAction(generateAction(android.R.drawable.ic_media_next, "Next", ACTION_NEXT));
         style.setShowActionsInCompactView(0, 1, 2, 3, 4);
 
@@ -254,6 +258,7 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
             if (currentSeekPos >= (Utility.SECOND_IN_MILLISECONDS * 5)) {
                 mMediaPlayer.seekTo(0);
                 mMediaPlayer.start();
+                updatePlaybackState(null);
                 return;
             }
         }
@@ -353,95 +358,4 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
 //        }
     }
 
-    private void initMediaSessions() {
-        mSession = new MediaSession(getApplicationContext(), "simple player session");
-        mController = new MediaController(getApplicationContext(), mSession.getSessionToken());
-        mSession.setCallback(new MediaSessionCallback());
-        mSession.setFlags(MediaSession.FLAG_HANDLES_MEDIA_BUTTONS |
-                MediaSession.FLAG_HANDLES_TRANSPORT_CONTROLS);
-
-        updatePlaybackState(null);
-    }
-
-    @Override
-    public boolean onUnbind(Intent intent) {
-        mSession.release();
-        mMediaPlayer = null;
-        return super.onUnbind(intent);
-    }
-
-    private final class MediaSessionCallback extends MediaSession.Callback {
-        @Override
-        public void onPlay() {
-            super.onPlay();
-            Log.e("MediaPlayerService", "onPlay");
-            play();
-            buildNotification(generateAction(android.R.drawable.ic_media_pause, "Pause", ACTION_PAUSE));
-        }
-
-        @Override
-        public void onPause() {
-            super.onPause();
-            Log.e("MediaPlayerService", "onPause");
-            pause();
-            buildNotification(generateAction(android.R.drawable.ic_media_play, "Play", ACTION_PLAY));
-        }
-
-        @Override
-        public void onSkipToNext() {
-            super.onSkipToNext();
-            Log.e("MediaPlayerService", "onSkipToNext");
-            skipToNext();
-            buildNotification(generateAction(android.R.drawable.ic_media_pause, "Pause", ACTION_PAUSE));
-
-        }
-
-        @Override
-        public void onSkipToPrevious() {
-            super.onSkipToPrevious();
-            Log.e("MediaPlayerService", "onSkipToPrevious");
-            skipToPrevious();
-            buildNotification(generateAction(android.R.drawable.ic_media_pause, "Pause", ACTION_PAUSE));
-        }
-
-        @Override
-        public void onFastForward() {
-            super.onFastForward();
-            Log.e("MediaPlayerService", "onFastForward");
-            //Manipulate current media here
-        }
-
-        @Override
-        public void onRewind() {
-            super.onRewind();
-            Log.e("MediaPlayerService", "onRewind");
-            //Manipulate current media here
-        }
-
-        @Override
-        public void onStop() {
-            super.onStop();
-            Log.e("MediaPlayerService", "onStop");
-            //Stop media player here
-            stop();
-
-            NotificationManager notificationManager = (NotificationManager) getApplicationContext().getSystemService(Context.NOTIFICATION_SERVICE);
-            notificationManager.cancel(1);
-            Intent intent = new Intent(getApplicationContext(), PlaybackService.class);
-            stopService(intent);
-        }
-
-        @Override
-        public void onSeekTo(long pos) {
-
-            super.onSeekTo(pos);
-            seekTo((int) pos);
-        }
-
-        @Override
-        public void onSetRating(Rating rating) {
-            super.onSetRating(rating);
-        }
-
-    }
 }

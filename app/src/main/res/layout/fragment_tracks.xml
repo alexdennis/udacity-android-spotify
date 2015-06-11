@@ -14,5 +14,37 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"></ListView>
 
+    <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+        android:id="@+id/tracks_not_found"
+        xmlns:tools="http://schemas.android.com/tools"
+        android:orientation="horizontal"
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/list_item_height"
+        android:gravity="center_vertical">
+
+        <FrameLayout
+            android:layout_width="@dimen/list_item_height"
+            android:layout_height="wrap_content"
+            android:padding="@dimen/list_item_padding">
+
+            <ImageView
+                android:maxWidth="@dimen/list_item_image_size"
+                android:maxHeight="@dimen/list_item_image_size"
+                android:id="@+id/list_item_image_artist"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:src="@drawable/ic_av_album" />
+
+        </FrameLayout>
+
+        <TextView
+            android:layout_width="0dp"
+            android:padding="@dimen/list_item_padding"
+            android:layout_height="wrap_content"
+            android:layout_weight="7"
+            android:text="@string/tracks_not_found" />
+
+    </LinearLayout>
+
 </LinearLayout>
 
