@@ -8,6 +8,9 @@ import android.content.IntentFilter;
 import android.content.res.ColorStateList;
 import android.graphics.Bitmap;
 import android.graphics.drawable.BitmapDrawable;
+import android.media.MediaMetadata;
+import android.media.session.MediaController;
+import android.media.session.MediaSession;
 import android.media.session.PlaybackState;
 import android.os.Bundle;
 import android.os.Handler;
@@ -64,6 +67,8 @@ public class PlayerActivityFragment extends DialogFragment {
     private long mCurrentTrackQueueId = -1;
     private int mState = PlaybackState.STATE_NONE;
     private PlaybackState mLastPlaybackState;
+    private MediaSession.Token mToken;
+    private MediaController mController;
 
     public PlayerActivityFragment() {
     }
@@ -97,9 +102,11 @@ public class PlayerActivityFragment extends DialogFragment {
     private PlaybackUpdateReceiver mPlaybackUpdateReceiver = new PlaybackUpdateReceiver();
     public class PlaybackUpdateReceiver extends BroadcastReceiver {
 
+        public static final String SESSION_UPDATE = "com.carltondennis.spotifystreamer.intent.action.SESSION_UPDATE";
         public static final String CUSTOM_INTENT = "com.carltondennis.spotifystreamer.intent.action.PLAYBACK_UPDATE";
         public static final String PLAYBACK_KEY = "playbackUpate";
         public static final String DURATION_KEY = "duration";
+        public static final String SESSION_KEY = "session";
 
         @Override
         public void onReceive(Context context, Intent intent) {
@@ -111,7 +118,48 @@ public class PlayerActivityFragment extends DialogFragment {
                 mState = mLastPlaybackState.getState();
                 updatePlayer(mLastPlaybackState, duration);
                 updateProgress();
+            } else if (intent.getAction().equals(PlaybackUpdateReceiver.SESSION_UPDATE)) {
+                Bundle extras = intent.getExtras();
+                mToken = extras.getParcelable(SESSION_KEY);
+                connectToSession(mToken);
             }
+        }
+    }
+
+    private MediaController.Callback mCallback = new MediaController.Callback() {
+        @Override
+        public void onPlaybackStateChanged(PlaybackState state) {
+            Log.d(TAG, "onPlaybackstate changed " + state);
+//            updatePlaybackState(state);
+        }
+
+        @Override
+        public void onMetadataChanged(MediaMetadata metadata) {
+            if (metadata != null) {
+//                updateMediaDescription(metadata.getDescription());
+//                updateDuration(metadata);
+            }
+        }
+    };
+
+    private void connectToSession(MediaSession.Token token) {
+        mController = new MediaController(getActivity(), token);
+        if (mController.getMetadata() == null) {
+//            finish();
+            return;
+        }
+        mController.registerCallback(mCallback);
+        PlaybackState state = mController.getPlaybackState();
+//        updatePlaybackState(state);
+//        MediaMetadata metadata = mediaController.getMetadata();
+//        if (metadata != null) {
+//            updateMediaDescription(metadata.getDescription());
+//            updateDuration(metadata);
+//        }
+        updateProgress();
+        if (state != null && (state.getState() == PlaybackState.STATE_PLAYING ||
+                state.getState() == PlaybackState.STATE_BUFFERING)) {
+            scheduleSeekbarUpdate();
         }
     }
 
@@ -151,39 +199,48 @@ public class PlayerActivityFragment extends DialogFragment {
         mButtonPrevious.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                Intent intent = new Intent(getActivity(), PlaybackService.class);
-                intent.setAction(PlaybackService.ACTION_PREVIOUS);
-                getActivity().startService(intent);
+//                Intent intent = new Intent(getActivity(), PlaybackService.class);
+//                intent.setAction(PlaybackService.ACTION_PREVIOUS);
+//                getActivity().startService(intent);
+
+                mController.getTransportControls().skipToPrevious();
             }
         });
         mButtonNext.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                Intent intent = new Intent(getActivity(), PlaybackService.class);
-                intent.setAction(PlaybackService.ACTION_NEXT);
-                getActivity().startService(intent);
+//                Intent intent = new Intent(getActivity(), PlaybackService.class);
+//                intent.setAction(PlaybackService.ACTION_NEXT);
+//                getActivity().startService(intent);
+                mController.getTransportControls().skipToNext();
             }
         });
         mButtonPlayPause.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 Intent intent;
+                if (mController == null) {
+                    return;
+                }
+
                 switch (mState) {
                     case PlaybackState.STATE_PLAYING: // fall through
                     case PlaybackState.STATE_BUFFERING:
-                        intent = new Intent(getActivity(), PlaybackService.class);
-                        intent.setAction(PlaybackService.ACTION_PAUSE);
-                        getActivity().startService(intent);
-                        stopSeekbarUpdate();
-                        mButtonPlayPause.setImageResource(android.R.drawable.ic_media_pause);
+//                        intent = new Intent(getActivity(), PlaybackService.class);
+//                        intent.setAction(PlaybackService.ACTION_PAUSE);
+//                        getActivity().startService(intent);
+//                        stopSeekbarUpdate();
+                        mController.getTransportControls().pause();
+                        mButtonPlayPause.setImageResource(android.R.drawable.ic_media_play);
                         break;
                     case PlaybackState.STATE_PAUSED:
                     case PlaybackState.STATE_STOPPED:
-                        intent = new Intent(getActivity(), PlaybackService.class);
-                        intent.setAction(PlaybackService.ACTION_PLAY);
-                        getActivity().startService(intent);
-                        scheduleSeekbarUpdate();
-                        mButtonPlayPause.setImageResource(android.R.drawable.ic_media_play);
+                        mController.getTransportControls().play();
+//                        intent = new Intent(getActivity(), PlaybackService.class);
+//                        intent.setAction(PlaybackService.ACTION_PLAY);
+//                        getActivity().startService(intent);
+//                        scheduleSeekbarUpdate();
+                        mButtonPlayPause.setImageResource(android.R.drawable.ic_media_pause);
                         break;
                     default:
                         Log.d(TAG, String.format("onClick with state = %d", mState));
@@ -275,6 +332,7 @@ public class PlayerActivityFragment extends DialogFragment {
     public void onResume() {
         super.onResume();
         IntentFilter intentFilter = new IntentFilter(PlaybackUpdateReceiver.CUSTOM_INTENT);
+        intentFilter.addAction(PlaybackUpdateReceiver.SESSION_UPDATE);
         getActivity().registerReceiver(mPlaybackUpdateReceiver, intentFilter);
     }
 

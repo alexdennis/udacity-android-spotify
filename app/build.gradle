@@ -28,5 +28,6 @@ dependencies {
     compile 'com.squareup.retrofit:retrofit:1.9.0'  // Uses this to create RESTful Requests
     compile 'com.squareup.okhttp:okhttp:2.2.0'  // Uses this to create HTTP connections
     compile 'com.android.support:palette-v7:21.0.0'
+    compile 'com.google.android.support:wearable:1.2.0'
     compile fileTree(dir: 'libs', include: ['*.jar'])
 }

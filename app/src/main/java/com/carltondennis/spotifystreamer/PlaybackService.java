@@ -9,11 +9,14 @@ import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.drawable.Drawable;
 import android.media.MediaPlayer;
+import android.media.session.MediaController;
+import android.media.session.MediaSession;
 import android.media.session.PlaybackState;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.os.PowerManager;
 import android.os.SystemClock;
+import android.support.wearable.media.MediaControlConstants;
 import android.util.Log;
 
 import com.squareup.picasso.Picasso;
@@ -40,6 +43,9 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
     private static final int NOTIFICATION_ID = 411;
 
     private MediaPlayer mMediaPlayer;
+    private MediaSession mSession;
+    private MediaController mController;
+
     private ArrayList<SpotifyTrack> mTracks;
     private int mTracksQueuePosition;
     private int mCurrentPosition;
@@ -53,7 +59,43 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
 
     @Override
     public void onCreate() {
+
+        mTracks = new ArrayList<SpotifyTrack>();
+
+        // Start a new MediaSession
+        mSession = new MediaSession(this, "PlaybackService");
+        mSession.setCallback(new MediaSessionCallback());
+        mSession.setFlags(MediaSession.FLAG_HANDLES_MEDIA_BUTTONS |
+                MediaSession.FLAG_HANDLES_TRANSPORT_CONTROLS);
+
+        Bundle sessionExtras = new Bundle();
+        sessionExtras.putBoolean(MediaControlConstants.EXTRA_RESERVE_SLOT_SKIP_TO_PREVIOUS, true);
+        sessionExtras.putBoolean(MediaControlConstants.EXTRA_RESERVE_SLOT_SKIP_TO_NEXT, true);
+        sessionExtras.putBoolean(MediaControlConstants.EXTRA_BACKGROUND_COLOR_FROM_THEME, true);
+        mSession.setExtras(sessionExtras);
+
+        mController = new MediaController(getApplicationContext(), mSession.getSessionToken());
+
         mNotificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+
+    }
+
+    @Override
+    public void onDestroy() {
+        if (mController != null) {
+            mController.getTransportControls().stop();
+        }
+
+        if (mMediaPlayer != null) {
+            mMediaPlayer.release();
+            mMediaPlayer = null;
+        }
+        if (mSession != null) {
+            mSession.release();
+            mSession = null;
+        }
+
+        super.onDestroy();
     }
 
     private void handleIntent(Intent intent) {
@@ -65,29 +107,21 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
         String action = intent.getAction();
 
         if (action.equalsIgnoreCase(ACTION_PLAY)) {
-            play();
-            buildNotification(generateAction(android.R.drawable.ic_media_pause, "Pause", ACTION_PAUSE));
-
+            mController.getTransportControls().play();
         } else if (action.equalsIgnoreCase(ACTION_PAUSE)) {
-            pause();
-            buildNotification(generateAction(android.R.drawable.ic_media_play, "Play", ACTION_PLAY));
+            mController.getTransportControls().pause();
         } else if (action.equalsIgnoreCase(ACTION_PREVIOUS)) {
-            skipToPrevious();
-            buildNotification(generateAction(android.R.drawable.ic_media_pause, "Pause", ACTION_PAUSE));
+            mController.getTransportControls().skipToPrevious();
         } else if (action.equalsIgnoreCase(ACTION_NEXT)) {
-            skipToNext();
-            buildNotification(generateAction(android.R.drawable.ic_media_pause, "Pause", ACTION_PAUSE));
+            mController.getTransportControls().skipToNext();
         } else if (action.equalsIgnoreCase(ACTION_STOP)) {
-            stop();
-            NotificationManager notificationManager = (NotificationManager) getApplicationContext().getSystemService(Context.NOTIFICATION_SERVICE);
-            notificationManager.cancel(1);
-            stopSelf();
+            mController.getTransportControls().stop();
         } else if (action.equalsIgnoreCase(ACTION_SEEK_TO)) {
             Bundle extras = intent.getExtras();
             if (extras != null && extras.containsKey(SEEK_POS_KEY)) {
                 int pos = extras.getInt(SEEK_POS_KEY, 0);
                 if (pos != 0) {
-                    seekTo(pos);
+                    mController.getTransportControls().seekTo(pos);
                 }
             }
         } else if (action.equalsIgnoreCase(ACTION_UPDATE_STATE)) {
@@ -137,7 +171,8 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
         builder.addAction(generateAction(android.R.drawable.ic_media_previous, "Previous", ACTION_PREVIOUS));
         builder.addAction(action);
         builder.addAction(generateAction(android.R.drawable.ic_media_next, "Next", ACTION_NEXT));
-        style.setShowActionsInCompactView(0, 1, 2);
+        style.setShowActionsInCompactView(1);
+        style.setMediaSession(mSession.getSessionToken());
 
         Picasso.with(getApplicationContext())
                 .load(track.imageLargeURL)
@@ -174,6 +209,7 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         handleIntent(intent);
+        sendSession();
         return super.onStartCommand(intent, flags, startId);
     }
 
@@ -346,6 +382,14 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
         return actions;
     }
 
+    private void sendSession() {
+        Intent i = new Intent(PlayerActivityFragment.PlaybackUpdateReceiver.SESSION_UPDATE);
+        Bundle extras = new Bundle();
+        extras.putParcelable(PlayerActivityFragment.PlaybackUpdateReceiver.SESSION_KEY, mSession.getSessionToken());
+        i.putExtras(extras);
+        sendBroadcast(i);
+    }
+
     /**
      * Update the current media player state, optionally showing an error message.
      *
@@ -379,7 +423,7 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
             stateBuilder.setActiveQueueItemId(mTracksQueuePosition);
         }
 
-//        mSession.setPlaybackState(stateBuilder.build());
+        mSession.setPlaybackState(stateBuilder.build());
 
         Intent i = new Intent(PlayerActivityFragment.PlaybackUpdateReceiver.CUSTOM_INTENT);
         Bundle extras = new Bundle();
@@ -388,9 +432,57 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
         i.putExtras(extras);
         sendBroadcast(i);
 
-//        if (state == PlaybackState.STATE_PLAYING || state == PlaybackState.STATE_PAUSED) {
-//            mMediaNotificationManager.startNotification();
-//        }
+        if (state == PlaybackState.STATE_PLAYING) {
+            buildNotification(generateAction(android.R.drawable.ic_media_pause, "Pause", ACTION_PAUSE));
+        } else if (state == PlaybackState.STATE_PAUSED) {
+            buildNotification(generateAction(android.R.drawable.ic_media_play, "Play", ACTION_PLAY));
+        }
+    }
+
+    private final class MediaSessionCallback extends MediaSession.Callback {
+        @Override
+        public void onPlay() {
+            super.onPlay();
+            Log.d(TAG, "play");
+            play();
+        }
+
+        @Override
+        public void onSeekTo(long position) {
+            Log.d(TAG, "onSeekTo:" + position);
+            seekTo((int) position);
+        }
+
+        @Override
+        public void onPause() {
+            super.onPause();
+            Log.d(TAG, "pause. current state=" + mState);
+            pause();
+        }
+
+        @Override
+        public void onStop() {
+            super.onStop();
+            Log.d(TAG, "onStop");
+            stop();
+            mNotificationManager.cancel(NOTIFICATION_ID);
+            Intent intent = new Intent(getApplicationContext(), PlaybackService.class);
+            stopService(intent);
+        }
+
+        @Override
+        public void onSkipToNext() {
+            super.onSkipToNext();
+            Log.e(TAG, "onSkipToNext");
+            skipToNext();
+        }
+
+        @Override
+        public void onSkipToPrevious() {
+            super.onSkipToPrevious();
+            Log.d(TAG, "onSkipToPrevious");
+            skipToPrevious();
+        }
     }
 
 }
