@@ -8,6 +8,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.drawable.Drawable;
+import android.media.MediaMetadata;
 import android.media.MediaPlayer;
 import android.media.session.MediaController;
 import android.media.session.MediaSession;
@@ -24,6 +25,7 @@ import com.squareup.picasso.Target;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.List;
 
 public class PlaybackService extends Service implements MediaPlayer.OnPreparedListener, MediaPlayer.OnCompletionListener,
         MediaPlayer.OnErrorListener, MediaPlayer.OnSeekCompleteListener {
@@ -47,6 +49,7 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
     private MediaController mController;
 
     private ArrayList<SpotifyTrack> mTracks;
+    private List<MediaSession.QueueItem> mTracksQueue;
     private int mTracksQueuePosition;
     private int mCurrentPosition;
     private int mState;
@@ -60,7 +63,7 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
     @Override
     public void onCreate() {
 
-        mTracks = new ArrayList<SpotifyTrack>();
+        mTracks = new ArrayList<>();
 
         // Start a new MediaSession
         mSession = new MediaSession(this, "PlaybackService");
@@ -141,6 +144,34 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
         }
     }
 
+    private void updateMetadata()
+    {
+        if (mTracksQueuePosition < 0 || mTracksQueuePosition >= mTracks.size()) {
+            Log.d(TAG, String.format("Invalid q pos: %d", mTracksQueuePosition));
+            return;
+        }
+
+        int duration = 0;
+        if (mMediaPlayer != null) {
+            duration = mMediaPlayer.getDuration();
+        }
+
+        SpotifyTrack track = mTracks.get(mTracksQueuePosition);
+        String id = String.valueOf(track.name.hashCode());
+
+        MediaMetadata metadata = new MediaMetadata.Builder()
+                .putString(MediaMetadata.METADATA_KEY_MEDIA_ID, id)
+                .putString(MediaMetadata.METADATA_KEY_ALBUM, track.albumName)
+                .putString(MediaMetadata.METADATA_KEY_ARTIST, track.artistName)
+                .putLong(MediaMetadata.METADATA_KEY_DURATION, duration)
+                .putString(MediaMetadata.METADATA_KEY_ALBUM_ART_URI, track.imageLargeURL)
+                .putString(MediaMetadata.METADATA_KEY_TITLE, track.name)
+                .build();
+
+        Log.d(TAG, "Updating metadata for MusicID= " + id);
+        mSession.setMetadata(metadata);
+    }
+
     private Notification.Action generateAction(int icon, String title, String intentAction) {
         Intent intent = new Intent(getApplicationContext(), PlaybackService.class);
         intent.setAction(intentAction);
@@ -163,9 +194,10 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
                 .setSmallIcon(R.mipmap.ic_launcher)
                 .setVisibility(Notification.VISIBILITY_PUBLIC)
                 .setContentTitle(track.name)
-                .setContentText(track.albumName)
+                .setContentText(track.artistName)
                 .setContentIntent(createContentIntent())
                 .setDeleteIntent(pendingIntent)
+                .setShowWhen(false)
                 .setStyle(style);
 
         builder.addAction(generateAction(android.R.drawable.ic_media_previous, "Previous", ACTION_PREVIOUS));
@@ -173,6 +205,7 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
         builder.addAction(generateAction(android.R.drawable.ic_media_next, "Next", ACTION_NEXT));
         style.setShowActionsInCompactView(1);
         style.setMediaSession(mSession.getSessionToken());
+
 
         Picasso.with(getApplicationContext())
                 .load(track.imageLargeURL)
@@ -197,11 +230,8 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
     }
 
     private PendingIntent createContentIntent() {
-        Intent openUI = new Intent(getApplicationContext(), PlayerActivity.class);
-        openUI.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
-        openUI.putExtra(PlayerActivityFragment.TRACK_KEY, mTracksQueuePosition);
-        openUI.putExtra(PlayerActivityFragment.TRACKS_KEY, mTracks);
-        openUI.putExtra(PlayerActivityFragment.ARTIST_KEY, "Michael J");
+        Intent openUI = new Intent(getApplicationContext(), MainActivity.class);
+        openUI.putExtra(PlayerActivityFragment.SESSION_TOKEN_KEY, mSession.getSessionToken());
         return PendingIntent.getActivity(getApplicationContext(), 1, openUI,
                 PendingIntent.FLAG_CANCEL_CURRENT);
     }
@@ -219,6 +249,7 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
         player.start();
         if (player.isPlaying()) {
             mState = PlaybackState.STATE_PLAYING;
+            updateMetadata();
             updatePlaybackState(null);
         }
     }
@@ -271,13 +302,18 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
         }
     }
 
-    private void play() {
+    private void play()
+    {
+        play(false);
+    }
+
+    private void play(boolean isSkipOrPrevious) {
         if (mTracksQueuePosition < 0 || mTracksQueuePosition >= mTracks.size()) {
             Log.d(TAG, String.format("Invalid q pos: %d", mTracksQueuePosition));
             return;
         }
 
-        if (mMediaPlayer != null && mState == PlaybackState.STATE_PAUSED) {
+        if (mMediaPlayer != null && !isSkipOrPrevious && mState == PlaybackState.STATE_PAUSED) {
             mMediaPlayer.start();
             if (mMediaPlayer.isPlaying()) {
                 mState = PlaybackState.STATE_PLAYING;
@@ -292,9 +328,13 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
             if (track.isPlayable()) {
                 Log.d(TAG, "Preparing source: " + track.previewURL);
                 createMediaPlayerIfNeeded();
+
+                mState = PlaybackState.STATE_BUFFERING;
+
                 mMediaPlayer.setDataSource(track.previewURL);
                 mMediaPlayer.prepareAsync();
-                mState = PlaybackState.STATE_BUFFERING;
+                
+                updatePlaybackState(null);
             }
         } catch (IOException ioex) {
             Log.d(TAG, ioex.getMessage());
@@ -318,7 +358,7 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
         if (mTracksQueuePosition >= mTracks.size()) {
             mTracksQueuePosition = mTracks.size() - 1;
         } else {
-            play();
+            play(true);
         }
     }
 
@@ -338,7 +378,7 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
         if (mTracksQueuePosition < 0) {
             mTracksQueuePosition = 0;
         }
-        play();
+        play(true);
     }
 
     private void stop() {
@@ -356,9 +396,9 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
             // If we do not have a current media player, simply update the current position
             mCurrentPosition = position;
         } else {
-            if (mMediaPlayer.isPlaying()) {
-                mState = PlaybackState.STATE_BUFFERING;
-            }
+//            if (mMediaPlayer.isPlaying()) {
+//                mState = PlaybackState.STATE_BUFFERING;
+//            }
             mMediaPlayer.seekTo(position);
             updatePlaybackState(null);
         }
@@ -398,10 +438,8 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
     private void updatePlaybackState(String error) {
         Log.d(TAG, "updatePlaybackState, playback state=" + mState);
         long position = PlaybackState.PLAYBACK_POSITION_UNKNOWN;
-        long duration = 0;
         if (mMediaPlayer != null) {
             position = mMediaPlayer.getCurrentPosition();
-            duration = mMediaPlayer.getDuration();
         }
 
         PlaybackState.Builder stateBuilder = new PlaybackState.Builder()
@@ -424,13 +462,6 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
         }
 
         mSession.setPlaybackState(stateBuilder.build());
-
-        Intent i = new Intent(PlayerActivityFragment.PlaybackUpdateReceiver.CUSTOM_INTENT);
-        Bundle extras = new Bundle();
-        extras.putParcelable(PlayerActivityFragment.PlaybackUpdateReceiver.PLAYBACK_KEY, stateBuilder.build());
-        extras.putLong(PlayerActivityFragment.PlaybackUpdateReceiver.DURATION_KEY, duration);
-        i.putExtras(extras);
-        sendBroadcast(i);
 
         if (state == PlaybackState.STATE_PLAYING) {
             buildNotification(generateAction(android.R.drawable.ic_media_pause, "Pause", ACTION_PAUSE));

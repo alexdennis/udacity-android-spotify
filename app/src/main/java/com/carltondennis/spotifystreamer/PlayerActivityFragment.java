@@ -34,6 +34,9 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
+import static android.view.View.INVISIBLE;
+import static android.view.View.VISIBLE;
+
 
 /**
  * A placeholder fragment containing a simple view.
@@ -45,7 +48,7 @@ public class PlayerActivityFragment extends DialogFragment {
     public static final String TRACK_KEY = "track";
     public static final String TRACKS_KEY = "tracks";
     public static final String ARTIST_KEY = "artist";
-    public static final String STATE_KEY  = "state";
+    public static final String SESSION_TOKEN_KEY = "session_token";
 
     private static final long PROGRESS_UPDATE_INTERNAL = 1000;
     private static final long PROGRESS_UPDATE_INITIAL_INTERVAL = 100;
@@ -63,8 +66,6 @@ public class PlayerActivityFragment extends DialogFragment {
 
 
     private Handler mHandler = new Handler();
-    private ArrayList<SpotifyTrack> mTracks;
-    private long mCurrentTrackQueueId = -1;
     private int mState = PlaybackState.STATE_NONE;
     private PlaybackState mLastPlaybackState;
     private MediaSession.Token mToken;
@@ -73,15 +74,23 @@ public class PlayerActivityFragment extends DialogFragment {
     public PlayerActivityFragment() {
     }
 
-    public static PlayerActivityFragment newInstance(ArrayList<SpotifyTrack> tracks, int trackIndex, String artistName) {
+    public static PlayerActivityFragment newInstance(ArrayList<SpotifyTrack> tracks, int trackIndex) {
         Bundle args = new Bundle();
         args.putParcelableArrayList(PlayerActivityFragment.TRACKS_KEY, tracks);
         args.putInt(PlayerActivityFragment.TRACK_KEY, trackIndex);
-        args.putString(PlayerActivityFragment.ARTIST_KEY, artistName);
 
         PlayerActivityFragment f = new PlayerActivityFragment();
         f.setArguments(args);
         return f;
+    }
+
+    public static PlayerActivityFragment newInstance(MediaSession.Token token) {
+        Bundle args = new Bundle();
+        args.putParcelable(PlayerActivityFragment.SESSION_TOKEN_KEY, token);
+        PlayerActivityFragment f = new PlayerActivityFragment();
+        f.setArguments(args);
+        return f;
+
     }
 
     /**
@@ -104,21 +113,11 @@ public class PlayerActivityFragment extends DialogFragment {
 
         public static final String SESSION_UPDATE = "com.carltondennis.spotifystreamer.intent.action.SESSION_UPDATE";
         public static final String CUSTOM_INTENT = "com.carltondennis.spotifystreamer.intent.action.PLAYBACK_UPDATE";
-        public static final String PLAYBACK_KEY = "playbackUpate";
-        public static final String DURATION_KEY = "duration";
         public static final String SESSION_KEY = "session";
 
         @Override
         public void onReceive(Context context, Intent intent) {
-            if (intent.getAction().equals(PlaybackUpdateReceiver.CUSTOM_INTENT)) {
-                Bundle extras = intent.getExtras();
-                mLastPlaybackState = extras.getParcelable(PLAYBACK_KEY);
-                long duration = extras.getLong(DURATION_KEY);
-
-                mState = mLastPlaybackState.getState();
-                updatePlayer(mLastPlaybackState, duration);
-                updateProgress();
-            } else if (intent.getAction().equals(PlaybackUpdateReceiver.SESSION_UPDATE)) {
+            if (intent.getAction().equals(PlaybackUpdateReceiver.SESSION_UPDATE)) {
                 Bundle extras = intent.getExtras();
                 mToken = extras.getParcelable(SESSION_KEY);
                 connectToSession(mToken);
@@ -130,32 +129,28 @@ public class PlayerActivityFragment extends DialogFragment {
         @Override
         public void onPlaybackStateChanged(PlaybackState state) {
             Log.d(TAG, "onPlaybackstate changed " + state);
-//            updatePlaybackState(state);
+            updatePlaybackState(state);
         }
 
         @Override
         public void onMetadataChanged(MediaMetadata metadata) {
             if (metadata != null) {
-//                updateMediaDescription(metadata.getDescription());
-//                updateDuration(metadata);
+                updateMediaDescription(metadata);
+                updateDuration(metadata);
             }
         }
     };
 
     private void connectToSession(MediaSession.Token token) {
         mController = new MediaController(getActivity(), token);
-        if (mController.getMetadata() == null) {
-//            finish();
-            return;
-        }
         mController.registerCallback(mCallback);
         PlaybackState state = mController.getPlaybackState();
-//        updatePlaybackState(state);
-//        MediaMetadata metadata = mediaController.getMetadata();
-//        if (metadata != null) {
-//            updateMediaDescription(metadata.getDescription());
-//            updateDuration(metadata);
-//        }
+        updatePlaybackState(state);
+        MediaMetadata metadata = mController.getMetadata();
+        if (metadata != null) {
+            updateMediaDescription(metadata);
+            updateDuration(metadata);
+        }
         updateProgress();
         if (state != null && (state.getState() == PlaybackState.STATE_PLAYING ||
                 state.getState() == PlaybackState.STATE_BUFFERING)) {
@@ -180,6 +175,104 @@ public class PlayerActivityFragment extends DialogFragment {
         mTrackSeekBar.setProgress((int) currentPosition);
     }
 
+    private void updateMediaDescription(MediaMetadata mediaMetadata) {
+        if (mediaMetadata == null) {
+            return;
+        }
+        Log.d(TAG, "updateMediaDescription called ");
+
+        String album = mediaMetadata.getString(MediaMetadata.METADATA_KEY_ALBUM);
+        String title = mediaMetadata.getString(MediaMetadata.METADATA_KEY_TITLE);
+        String artist = mediaMetadata.getString(MediaMetadata.METADATA_KEY_ARTIST);
+        String art = mediaMetadata.getString(MediaMetadata.METADATA_KEY_ALBUM_ART_URI);
+
+        mAlbumView.setText(album);
+        mTrackView.setText(title);
+        mArtistView.setText(artist);
+
+        Picasso.with(getActivity())
+                .load(art)
+                .transform(PaletteTransformation.instance())
+                .into(mAlbumImageView, new Callback.EmptyCallback() {
+                    @Override
+                    public void onSuccess() {
+                        Bitmap bitmap = ((BitmapDrawable) mAlbumImageView.getDrawable()).getBitmap(); // Ew!
+                        Palette palette = PaletteTransformation.getPalette(bitmap);
+
+                        int foreground = palette.getDarkVibrantColor(0x000000);
+
+                        mButtonPlayPause.setColorFilter(foreground);
+                        mButtonNext.setColorFilter(foreground);
+                        mButtonPrevious.setColorFilter(foreground);
+                        mTrackSeekBar.setProgressTintList(ColorStateList.valueOf(foreground));
+                        mTrackSeekBar.setThumbTintList(ColorStateList.valueOf(foreground));
+                    }
+                });
+    }
+
+    private void updatePlaybackState(PlaybackState state) {
+        if (state == null) {
+            return;
+        }
+        mLastPlaybackState = state;
+        mState = mLastPlaybackState.getState();
+//        String castName = getMediaController()
+//                .getExtras().getString(MusicService.EXTRA_CONNECTED_CAST);
+        String line3Text = "";
+//        if (castName != null) {
+//            line3Text = getResources()
+//                    .getString(R.string.casting_to_device, castName);
+//        }
+//        mLine3.setText(line3Text);
+
+        switch (state.getState()) {
+            case PlaybackState.STATE_PLAYING:
+//                mLoading.setVisibility(INVISIBLE);
+                mButtonPlayPause.setVisibility(VISIBLE);
+                mButtonPlayPause.setImageResource(android.R.drawable.ic_media_pause);
+//                mControllers.setVisibility(VISIBLE);
+                scheduleSeekbarUpdate();
+                break;
+            case PlaybackState.STATE_PAUSED:
+//                mControllers.setVisibility(VISIBLE);
+//                mLoading.setVisibility(INVISIBLE);
+                mButtonPlayPause.setVisibility(VISIBLE);
+                mButtonPlayPause.setImageResource(android.R.drawable.ic_media_play);
+                stopSeekbarUpdate();
+                break;
+            case PlaybackState.STATE_NONE:
+            case PlaybackState.STATE_STOPPED:
+//                mLoading.setVisibility(INVISIBLE);
+                mButtonPlayPause.setVisibility(VISIBLE);
+                mButtonPlayPause.setImageResource(android.R.drawable.ic_media_pause);
+                stopSeekbarUpdate();
+                break;
+            case PlaybackState.STATE_BUFFERING:
+                mButtonPlayPause.setVisibility(INVISIBLE);
+//                mLoading.setVisibility(VISIBLE);
+//                mLine3.setText(R.string.loading);
+                stopSeekbarUpdate();
+                break;
+            default:
+                Log.d(TAG, "Unhandled state " + state.getState());
+        }
+
+//        mSkipNext.setVisibility((state.getActions() & PlaybackState.ACTION_SKIP_TO_NEXT) == 0
+//                ? INVISIBLE : VISIBLE);
+//        mSkipPrev.setVisibility((state.getActions() & PlaybackState.ACTION_SKIP_TO_PREVIOUS) == 0
+//                ? INVISIBLE : VISIBLE);
+    }
+
+    private void updateDuration(MediaMetadata metadata) {
+        if (metadata == null) {
+            return;
+        }
+        Log.d(TAG, "updateDuration called ");
+        int duration = (int) metadata.getLong(MediaMetadata.METADATA_KEY_DURATION);
+        mTrackDurationView.setText(Utility.fromMillisecs(duration));
+        mTrackSeekBar.setMax(duration);
+    }
+
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
                              Bundle savedInstanceState) {
@@ -199,26 +292,18 @@ public class PlayerActivityFragment extends DialogFragment {
         mButtonPrevious.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-//                Intent intent = new Intent(getActivity(), PlaybackService.class);
-//                intent.setAction(PlaybackService.ACTION_PREVIOUS);
-//                getActivity().startService(intent);
-
                 mController.getTransportControls().skipToPrevious();
             }
         });
         mButtonNext.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-//                Intent intent = new Intent(getActivity(), PlaybackService.class);
-//                intent.setAction(PlaybackService.ACTION_NEXT);
-//                getActivity().startService(intent);
                 mController.getTransportControls().skipToNext();
             }
         });
         mButtonPlayPause.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                Intent intent;
                 if (mController == null) {
                     return;
                 }
@@ -226,21 +311,15 @@ public class PlayerActivityFragment extends DialogFragment {
                 switch (mState) {
                     case PlaybackState.STATE_PLAYING: // fall through
                     case PlaybackState.STATE_BUFFERING:
-//                        intent = new Intent(getActivity(), PlaybackService.class);
-//                        intent.setAction(PlaybackService.ACTION_PAUSE);
-//                        getActivity().startService(intent);
-//                        stopSeekbarUpdate();
                         mController.getTransportControls().pause();
                         mButtonPlayPause.setImageResource(android.R.drawable.ic_media_play);
+                        stopSeekbarUpdate();
                         break;
                     case PlaybackState.STATE_PAUSED:
                     case PlaybackState.STATE_STOPPED:
                         mController.getTransportControls().play();
-//                        intent = new Intent(getActivity(), PlaybackService.class);
-//                        intent.setAction(PlaybackService.ACTION_PLAY);
-//                        getActivity().startService(intent);
-//                        scheduleSeekbarUpdate();
                         mButtonPlayPause.setImageResource(android.R.drawable.ic_media_pause);
+                        scheduleSeekbarUpdate();
                         break;
                     default:
                         Log.d(TAG, String.format("onClick with state = %d", mState));
@@ -280,30 +359,24 @@ public class PlayerActivityFragment extends DialogFragment {
     public void onActivityCreated(Bundle savedInstanceState) {
         super.onActivityCreated(savedInstanceState);
 
+        if (savedInstanceState != null && savedInstanceState.containsKey(SESSION_TOKEN_KEY)) {
+            mToken = savedInstanceState.getParcelable(SESSION_TOKEN_KEY);
+            connectToSession(mToken);
+            return;
+        }
+
         Bundle args = getArguments();
         if (args != null) {
-            if (args.containsKey(ARTIST_KEY)) {
-                mArtistView.setText(args.getString(ARTIST_KEY));
-            }
-
-            if (args.containsKey(TRACK_KEY) && args.containsKey(TRACKS_KEY)) {
-                mTracks = args.getParcelableArrayList(TRACKS_KEY);
-
+            if (args.containsKey(SESSION_TOKEN_KEY)) {
+                mToken = args.getParcelable(SESSION_TOKEN_KEY);
+                connectToSession(mToken);
+            } else if (args.containsKey(TRACK_KEY) && args.containsKey(TRACKS_KEY)) {
+                // First time this fragment is run since there is no state, so we
+                // have to pass the new track list and queue position to the service
                 Intent intent = new Intent(getActivity(), PlaybackService.class);
-
-
-                if (savedInstanceState != null && savedInstanceState.containsKey(STATE_KEY)) {
-                    mState = savedInstanceState.getInt(STATE_KEY);
-                    intent.setAction(PlaybackService.ACTION_UPDATE_STATE);
-                } else {
-                    // First time this fragment is run since there is no state, so we
-                    // have to pass the new track list and queue position to the service
-                    intent.setAction(PlaybackService.ACTION_PLAY);
-                    intent.putExtras(args);
-                }
-
+                intent.setAction(PlaybackService.ACTION_PLAY);
+                intent.putExtras(args);
                 getActivity().startService(intent);
-                scheduleSeekbarUpdate();
             }
         }
     }
@@ -345,7 +418,7 @@ public class PlayerActivityFragment extends DialogFragment {
     @Override
     public void onSaveInstanceState(Bundle outState) {
         super.onSaveInstanceState(outState);
-        outState.putInt(STATE_KEY, mState);
+        outState.putParcelable(SESSION_TOKEN_KEY, mToken);
     }
 
     @Override
@@ -353,47 +426,6 @@ public class PlayerActivityFragment extends DialogFragment {
         super.onDestroy();
         stopSeekbarUpdate();
         mExecutorService.shutdown();
-    }
-
-    private void updatePlayer(PlaybackState state, long duration) {
-        long queueId = state.getActiveQueueItemId();
-
-        if (queueId < 0 || queueId >= mTracks.size()) {
-            return;
-        }
-
-        if (mCurrentTrackQueueId != queueId) {
-            // Media changed
-            mCurrentTrackQueueId = queueId;
-
-            SpotifyTrack track = mTracks.get((int) mCurrentTrackQueueId);
-
-            mAlbumView.setText(track.albumName);
-            mTrackView.setText(track.name);
-            mTrackDurationView.setText(Utility.fromMillisecs((int) duration));
-            mTrackSeekBar.setMax((int) duration);
-            Picasso.with(getActivity())
-                    .load(track.imageLargeURL)
-                    .transform(PaletteTransformation.instance())
-                    .into(mAlbumImageView, new Callback.EmptyCallback() {
-                        @Override
-                        public void onSuccess() {
-                            Bitmap bitmap = ((BitmapDrawable) mAlbumImageView.getDrawable()).getBitmap(); // Ew!
-                            Palette palette = PaletteTransformation.getPalette(bitmap);
-
-                            int foreground = palette.getDarkVibrantColor(0x000000);
-
-                            mButtonPlayPause.setColorFilter(foreground);
-                            mButtonNext.setColorFilter(foreground);
-                            mButtonPrevious.setColorFilter(foreground);
-                            mTrackSeekBar.setProgressTintList(ColorStateList.valueOf(foreground));
-                            mTrackSeekBar.setThumbTintList(ColorStateList.valueOf(foreground));
-                        }
-                    });
-        }
-
-
-
     }
 
 }

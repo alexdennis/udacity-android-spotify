@@ -51,11 +51,10 @@ public class TracksActivity extends Activity implements TracksActivityFragment.C
         return super.onOptionsItemSelected(item);
     }
 
-    public void onTrackSelected(ArrayList<SpotifyTrack> tracks, int trackIndex, String artistName) {
+    public void onTrackSelected(ArrayList<SpotifyTrack> tracks, int trackIndex) {
         Bundle extras = new Bundle();
         extras.putParcelableArrayList(PlayerActivityFragment.TRACKS_KEY, tracks);
         extras.putInt(PlayerActivityFragment.TRACK_KEY, trackIndex);
-        extras.putString(PlayerActivityFragment.ARTIST_KEY, artistName);
         Intent intent = new Intent(this, PlayerActivity.class)
                 .putExtras(extras);
         startActivity(intent);

@@ -2,6 +2,7 @@ package com.carltondennis.spotifystreamer;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.media.session.MediaSession;
 import android.os.Bundle;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -17,12 +18,25 @@ public class MainActivity extends Activity implements MainActivityFragment.Callb
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-
-
         if (findViewById(R.id.fragment_tracks) != null) {
             mTwoPane = true;
         } else {
             mTwoPane = false;
+        }
+
+        if (savedInstanceState == null) {
+            Intent intent = getIntent();
+            if (intent != null && intent.hasExtra(PlayerActivityFragment.SESSION_TOKEN_KEY)) {
+                MediaSession.Token token = intent.getParcelableExtra(PlayerActivityFragment.SESSION_TOKEN_KEY);
+                if (mTwoPane) {
+                    PlayerActivityFragment f = PlayerActivityFragment.newInstance(token);
+                    f.show(getFragmentManager(), "dialog");
+                } else {
+                    Intent playerIntent = new Intent(this, PlayerActivity.class);
+                    playerIntent.putExtra(PlayerActivityFragment.SESSION_TOKEN_KEY, token);
+                    startActivity(playerIntent);
+                }
+            }
         }
     }
 
@@ -80,8 +94,8 @@ public class MainActivity extends Activity implements MainActivityFragment.Callb
         }
     }
 
-    public void onTrackSelected(ArrayList<SpotifyTrack> tracks, int trackIndex, String artistName) {
-        PlayerActivityFragment fragment = PlayerActivityFragment.newInstance(tracks, trackIndex, artistName);
+    public void onTrackSelected(ArrayList<SpotifyTrack> tracks, int trackIndex) {
+        PlayerActivityFragment fragment = PlayerActivityFragment.newInstance(tracks, trackIndex);
         fragment.show(getFragmentManager(), "dialog");
     }
 }

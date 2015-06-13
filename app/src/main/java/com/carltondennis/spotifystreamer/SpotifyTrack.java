@@ -9,13 +9,15 @@ import android.os.Parcelable;
 public class SpotifyTrack implements Parcelable {
     public String name;
     public String albumName;
+    public String artistName;
     public String imageLargeURL;
     public String imageSmallURL;
     public String previewURL;
 
-    public SpotifyTrack(String name, String albumName, String imageLargeURL, String imageSmallURL, String previewURL) {
+    public SpotifyTrack(String name, String albumName, String artistName, String imageLargeURL, String imageSmallURL, String previewURL) {
         this.name = name;
         this.albumName = albumName;
+        this.artistName = artistName;
         this.imageLargeURL = imageLargeURL;
         this.imageSmallURL = imageSmallURL;
         this.previewURL = previewURL;
@@ -32,6 +34,7 @@ public class SpotifyTrack implements Parcelable {
     public void writeToParcel(Parcel out, int flags) {
         out.writeString(name);
         out.writeString(albumName);
+        out.writeString(artistName);
         out.writeString(imageLargeURL);
         out.writeString(imageSmallURL);
         out.writeString(previewURL);
@@ -51,6 +54,7 @@ public class SpotifyTrack implements Parcelable {
     private SpotifyTrack(Parcel in) {
         name = in.readString();
         albumName = in.readString();
+        artistName = in.readString();
         imageLargeURL = in.readString();
         imageSmallURL = in.readString();
         previewURL = in.readString();

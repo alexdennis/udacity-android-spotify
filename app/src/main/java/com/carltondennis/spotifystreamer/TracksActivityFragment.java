@@ -66,8 +66,7 @@ public class TracksActivityFragment extends Fragment {
 
                 ((Callback) getActivity()).onTrackSelected(
                         adapter.getTracks(),
-                        position,
-                        mArtistName
+                        position
                 );
             }
         });
@@ -118,7 +117,7 @@ public class TracksActivityFragment extends Fragment {
         /**
          * Callback for when an item has been selected.
          */
-        public void onTrackSelected(ArrayList<SpotifyTrack> tracks, int trackIndex, String artistName);
+        void onTrackSelected(ArrayList<SpotifyTrack> tracks, int trackIndex);
     }
 
     class FetchTop10TracksTask extends AsyncTask<String, Void, ArrayList<SpotifyTrack>> {
@@ -166,7 +165,7 @@ public class TracksActivityFragment extends Fragment {
                             }
                         }
 
-                        spotifyTracks.add(new SpotifyTrack(track.name, track.album.name, imageUrlLarge, imageUrlSmall, track.preview_url));
+                        spotifyTracks.add(new SpotifyTrack(track.name, track.album.name, mArtistName, imageUrlLarge, imageUrlSmall, track.preview_url));
                     }
 
                     return spotifyTracks;

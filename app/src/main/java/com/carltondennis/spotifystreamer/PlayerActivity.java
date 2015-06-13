@@ -1,6 +1,8 @@
 package com.carltondennis.spotifystreamer;
 
 import android.app.Activity;
+import android.content.Intent;
+import android.media.session.MediaSession;
 import android.os.Bundle;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -16,15 +18,25 @@ public class PlayerActivity extends Activity {
         setContentView(R.layout.activity_player);
 
         if (savedInstanceState == null) {
-            ArrayList<SpotifyTrack> tracks = getIntent().getParcelableArrayListExtra(PlayerActivityFragment.TRACKS_KEY);
-            int trackIndex = getIntent().getIntExtra(PlayerActivityFragment.TRACK_KEY, 0);
-            String artistName = getIntent().getStringExtra(PlayerActivityFragment.ARTIST_KEY);
+            Intent intent = getIntent();
+            if (intent != null) {
+                if (intent.hasExtra(PlayerActivityFragment.TRACKS_KEY) && intent.hasExtra(PlayerActivityFragment.TRACK_KEY)) {
+                    ArrayList<SpotifyTrack> tracks = intent.getParcelableArrayListExtra(PlayerActivityFragment.TRACKS_KEY);
+                    int trackIndex = intent.getIntExtra(PlayerActivityFragment.TRACK_KEY, 0);
+                    PlayerActivityFragment f = PlayerActivityFragment.newInstance(tracks, trackIndex);
+                    getFragmentManager().beginTransaction()
+                            .replace(R.id.player_container, f)
+                            .commit();
+                }
 
-            PlayerActivityFragment f = PlayerActivityFragment.newInstance(tracks, trackIndex, artistName);
-
-            getFragmentManager().beginTransaction()
-                    .replace(R.id.player_container, f)
-                    .commit();
+                if (intent.hasExtra(PlayerActivityFragment.SESSION_TOKEN_KEY)) {
+                    MediaSession.Token token = intent.getParcelableExtra(PlayerActivityFragment.SESSION_TOKEN_KEY);
+                    PlayerActivityFragment f = PlayerActivityFragment.newInstance(token);
+                    getFragmentManager().beginTransaction()
+                            .replace(R.id.player_container, f)
+                            .commit();
+                }
+            }
         }
     }
 
