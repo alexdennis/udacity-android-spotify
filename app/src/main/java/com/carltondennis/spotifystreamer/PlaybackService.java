@@ -13,22 +13,22 @@ import android.media.MediaPlayer;
 import android.media.session.MediaController;
 import android.media.session.MediaSession;
 import android.media.session.PlaybackState;
+import android.net.wifi.WifiManager;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.os.PowerManager;
 import android.os.SystemClock;
 import android.support.wearable.media.MediaControlConstants;
 import android.util.Log;
+import android.net.wifi.WifiManager.WifiLock;
 
 import com.squareup.picasso.Picasso;
 import com.squareup.picasso.Target;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.List;
 
-public class PlaybackService extends Service implements MediaPlayer.OnPreparedListener, MediaPlayer.OnCompletionListener,
-        MediaPlayer.OnErrorListener, MediaPlayer.OnSeekCompleteListener {
+public class PlaybackService extends Service {
 
     public static final String TAG = PlaybackService.class.getSimpleName();
 
@@ -37,10 +37,6 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
     public static final String ACTION_NEXT = "action_next";
     public static final String ACTION_PREVIOUS = "action_previous";
     public static final String ACTION_STOP = "action_stop";
-    public static final String ACTION_SEEK_TO = "action_seek_to";
-    public static final String ACTION_UPDATE_STATE = "action_update_state";
-
-    public static final String SEEK_POS_KEY = "seek_pos";
 
     private static final int NOTIFICATION_ID = 411;
 
@@ -49,11 +45,11 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
     private MediaController mController;
 
     private ArrayList<SpotifyTrack> mTracks;
-    private List<MediaSession.QueueItem> mTracksQueue;
     private int mTracksQueuePosition;
     private int mCurrentPosition;
     private int mState;
     private NotificationManager mNotificationManager;
+    private WifiLock mWifiLock;
 
     @Override
     public IBinder onBind(Intent intent) {
@@ -78,21 +74,16 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
         mSession.setExtras(sessionExtras);
 
         mController = new MediaController(getApplicationContext(), mSession.getSessionToken());
-
         mNotificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+
+        mWifiLock = ((WifiManager) getSystemService(Context.WIFI_SERVICE))
+                .createWifiLock(WifiManager.WIFI_MODE_FULL, "my_lock");
 
     }
 
     @Override
     public void onDestroy() {
-        if (mController != null) {
-            mController.getTransportControls().stop();
-        }
-
-        if (mMediaPlayer != null) {
-            mMediaPlayer.release();
-            mMediaPlayer = null;
-        }
+        stop();
         if (mSession != null) {
             mSession.release();
             mSession = null;
@@ -119,16 +110,6 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
             mController.getTransportControls().skipToNext();
         } else if (action.equalsIgnoreCase(ACTION_STOP)) {
             mController.getTransportControls().stop();
-        } else if (action.equalsIgnoreCase(ACTION_SEEK_TO)) {
-            Bundle extras = intent.getExtras();
-            if (extras != null && extras.containsKey(SEEK_POS_KEY)) {
-                int pos = extras.getInt(SEEK_POS_KEY, 0);
-                if (pos != 0) {
-                    mController.getTransportControls().seekTo(pos);
-                }
-            }
-        } else if (action.equalsIgnoreCase(ACTION_UPDATE_STATE)) {
-            updatePlaybackState(null);
         }
     }
 
@@ -142,34 +123,6 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
                 mTracksQueuePosition = extras.getInt(PlayerActivityFragment.TRACK_KEY);
             }
         }
-    }
-
-    private void updateMetadata()
-    {
-        if (mTracksQueuePosition < 0 || mTracksQueuePosition >= mTracks.size()) {
-            Log.d(TAG, String.format("Invalid q pos: %d", mTracksQueuePosition));
-            return;
-        }
-
-        int duration = 0;
-        if (mMediaPlayer != null) {
-            duration = mMediaPlayer.getDuration();
-        }
-
-        SpotifyTrack track = mTracks.get(mTracksQueuePosition);
-        String id = String.valueOf(track.name.hashCode());
-
-        MediaMetadata metadata = new MediaMetadata.Builder()
-                .putString(MediaMetadata.METADATA_KEY_MEDIA_ID, id)
-                .putString(MediaMetadata.METADATA_KEY_ALBUM, track.albumName)
-                .putString(MediaMetadata.METADATA_KEY_ARTIST, track.artistName)
-                .putLong(MediaMetadata.METADATA_KEY_DURATION, duration)
-                .putString(MediaMetadata.METADATA_KEY_ALBUM_ART_URI, track.imageLargeURL)
-                .putString(MediaMetadata.METADATA_KEY_TITLE, track.name)
-                .build();
-
-        Log.d(TAG, "Updating metadata for MusicID= " + id);
-        mSession.setMetadata(metadata);
     }
 
     private Notification.Action generateAction(int icon, String title, String intentAction) {
@@ -187,16 +140,12 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
         }
         SpotifyTrack track = mTracks.get(mTracksQueuePosition);
 
-        Intent intent = new Intent(getApplicationContext(), PlaybackService.class);
-        intent.setAction(ACTION_STOP);
-        PendingIntent pendingIntent = PendingIntent.getService(getApplicationContext(), 1, intent, 0);
         final Notification.Builder builder = new Notification.Builder(this)
                 .setSmallIcon(R.mipmap.ic_launcher)
                 .setVisibility(Notification.VISIBILITY_PUBLIC)
                 .setContentTitle(track.name)
                 .setContentText(track.artistName)
                 .setContentIntent(createContentIntent())
-                .setDeleteIntent(pendingIntent)
                 .setShowWhen(false)
                 .setStyle(style);
 
@@ -206,6 +155,8 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
         style.setShowActionsInCompactView(1);
         style.setMediaSession(mSession.getSessionToken());
 
+        Notification notification = builder.build();
+        startForeground(NOTIFICATION_ID, notification);
 
         Picasso.with(getApplicationContext())
                 .load(track.imageLargeURL)
@@ -226,7 +177,24 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
                     }
                 });
 
+    }
 
+    private void relaxResources(boolean releaseMediaPlayer) {
+        Log.d(TAG, "relaxResources. releaseMediaPlayer=" + releaseMediaPlayer);
+
+        stopForeground(true);
+
+        // stop and release the Media Player, if it's available
+        if (releaseMediaPlayer && mMediaPlayer != null) {
+            mMediaPlayer.reset();
+            mMediaPlayer.release();
+            mMediaPlayer = null;
+        }
+
+        // we can also release the Wifi lock, if we're holding it
+        if (mWifiLock.isHeld()) {
+            mWifiLock.release();
+        }
     }
 
     private PendingIntent createContentIntent() {
@@ -239,47 +207,8 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         handleIntent(intent);
-        sendSession();
+        sendSessionToken();
         return super.onStartCommand(intent, flags, startId);
-    }
-
-    @Override
-    public void onPrepared(MediaPlayer player) {
-
-        player.start();
-        if (player.isPlaying()) {
-            mState = PlaybackState.STATE_PLAYING;
-            updateMetadata();
-            updatePlaybackState(null);
-        }
-    }
-
-    /**
-     * Called when there's an error playing media. When this happens, the media
-     * player goes to the Error state. We warn the user about the error and
-     * reset the media player.
-     *
-     * @see MediaPlayer.OnErrorListener
-     */
-    @Override
-    public boolean onError(MediaPlayer mp, int what, int extra) {
-        Log.e(TAG, "Media player error: what=" + what + ", extra=" + extra);
-        return true; // true indicates we handled the error
-    }
-
-    @Override
-    public void onCompletion(MediaPlayer mp) {
-        skipToNext();
-    }
-
-    @Override
-    public void onSeekComplete(MediaPlayer mp) {
-        Log.d(TAG, "onSeekComplete from MediaPlayer:" + mp.getCurrentPosition());
-        mCurrentPosition = mp.getCurrentPosition();
-        if (mState == PlaybackState.STATE_BUFFERING) {
-            mMediaPlayer.start();
-            mState = PlaybackState.STATE_PLAYING;
-        }
     }
 
     private void createMediaPlayerIfNeeded() {
@@ -293,10 +222,11 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
 
             // we want the media player to notify us when it's ready preparing,
             // and when it's done playing:
-            mMediaPlayer.setOnPreparedListener(this);
-            mMediaPlayer.setOnErrorListener(this);
-            mMediaPlayer.setOnCompletionListener(this);
-            mMediaPlayer.setOnSeekCompleteListener(this);
+            MediaPlayerCallbacks callbacks = new MediaPlayerCallbacks();
+            mMediaPlayer.setOnPreparedListener(callbacks);
+            mMediaPlayer.setOnErrorListener(callbacks);
+            mMediaPlayer.setOnCompletionListener(callbacks);
+            mMediaPlayer.setOnSeekCompleteListener(callbacks);
         } else {
             mMediaPlayer.reset();
         }
@@ -324,6 +254,8 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
 
         SpotifyTrack track = mTracks.get(mTracksQueuePosition);
 
+        relaxResources(false);
+
         try {
             if (track.isPlayable()) {
                 Log.d(TAG, "Preparing source: " + track.previewURL);
@@ -333,7 +265,9 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
 
                 mMediaPlayer.setDataSource(track.previewURL);
                 mMediaPlayer.prepareAsync();
-                
+
+                mWifiLock.acquire();
+
                 updatePlaybackState(null);
             }
         } catch (IOException ioex) {
@@ -342,14 +276,17 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
     }
 
     private void pause() {
-        if (mMediaPlayer != null) {
-            if (mMediaPlayer.isPlaying()) {
+        if (mState == PlaybackState.STATE_PLAYING) {
+            if (mMediaPlayer != null && mMediaPlayer.isPlaying()) {
                 mMediaPlayer.pause();
-                mState = PlaybackState.STATE_PAUSED;
                 updatePlaybackState(null);
             }
+
+            relaxResources(false);
         }
 
+        mState = PlaybackState.STATE_PAUSED;
+        updatePlaybackState(null);
     }
 
     private void skipToNext() {
@@ -382,11 +319,10 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
     }
 
     private void stop() {
-        if (mMediaPlayer != null) {
-            mMediaPlayer.stop();
-            mState = PlaybackState.STATE_STOPPED;
-            updatePlaybackState(null);
-        }
+        mState = PlaybackState.STATE_STOPPED;
+        updatePlaybackState(null);
+        relaxResources(true);
+        stopSelf();
     }
 
     private void seekTo(int position) {
@@ -422,10 +358,10 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
         return actions;
     }
 
-    private void sendSession() {
-        Intent i = new Intent(PlayerActivityFragment.PlaybackUpdateReceiver.SESSION_UPDATE);
+    private void sendSessionToken() {
+        Intent i = new Intent(PlayerActivityFragment.ACTION_TOKEN_UPDATE);
         Bundle extras = new Bundle();
-        extras.putParcelable(PlayerActivityFragment.PlaybackUpdateReceiver.SESSION_KEY, mSession.getSessionToken());
+        extras.putParcelable(PlayerActivityFragment.SESSION_TOKEN_KEY, mSession.getSessionToken());
         i.putExtras(extras);
         sendBroadcast(i);
     }
@@ -470,6 +406,72 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
         }
     }
 
+    private void updateMetadata()
+    {
+        if (mTracksQueuePosition < 0 || mTracksQueuePosition >= mTracks.size()) {
+            Log.d(TAG, String.format("Invalid q pos: %d", mTracksQueuePosition));
+            return;
+        }
+
+        int duration = 0;
+        if (mMediaPlayer != null) {
+            duration = mMediaPlayer.getDuration();
+        }
+
+        SpotifyTrack track = mTracks.get(mTracksQueuePosition);
+        String id = String.valueOf(track.name.hashCode());
+
+        MediaMetadata metadata = new MediaMetadata.Builder()
+                .putString(MediaMetadata.METADATA_KEY_MEDIA_ID, id)
+                .putString(MediaMetadata.METADATA_KEY_ALBUM, track.albumName)
+                .putString(MediaMetadata.METADATA_KEY_ARTIST, track.artistName)
+                .putLong(MediaMetadata.METADATA_KEY_DURATION, duration)
+                .putString(MediaMetadata.METADATA_KEY_ALBUM_ART_URI, track.imageLargeURL)
+                .putString(MediaMetadata.METADATA_KEY_TITLE, track.name)
+                .build();
+
+        Log.d(TAG, "Updating metadata for MusicID= " + id);
+        mSession.setMetadata(metadata);
+    }
+
+    private final class MediaPlayerCallbacks implements MediaPlayer.OnPreparedListener, MediaPlayer.OnCompletionListener,
+            MediaPlayer.OnErrorListener, MediaPlayer.OnSeekCompleteListener {
+
+        @Override
+        public void onPrepared(MediaPlayer player) {
+
+            player.start();
+            if (player.isPlaying()) {
+                mState = PlaybackState.STATE_PLAYING;
+                updateMetadata();
+                updatePlaybackState(null);
+            }
+        }
+
+        @Override
+        public boolean onError(MediaPlayer mp, int what, int extra) {
+            Log.e(TAG, "Media player error: what=" + what + ", extra=" + extra);
+            updatePlaybackState("Media player error: what=" + what + ", extra=" + extra);
+            return true; // true indicates we handled the error
+        }
+
+        @Override
+        public void onCompletion(MediaPlayer mp) {
+
+            skipToNext();
+        }
+
+        @Override
+        public void onSeekComplete(MediaPlayer mp) {
+            Log.d(TAG, "onSeekComplete from MediaPlayer:" + mp.getCurrentPosition());
+            mCurrentPosition = mp.getCurrentPosition();
+            if (mState == PlaybackState.STATE_BUFFERING) {
+                mMediaPlayer.start();
+                mState = PlaybackState.STATE_PLAYING;
+            }
+        }
+    }
+
     private final class MediaSessionCallback extends MediaSession.Callback {
         @Override
         public void onPlay() {
@@ -496,7 +498,6 @@ public class PlaybackService extends Service implements MediaPlayer.OnPreparedLi
             super.onStop();
             Log.d(TAG, "onStop");
             stop();
-            mNotificationManager.cancel(NOTIFICATION_ID);
             Intent intent = new Intent(getApplicationContext(), PlaybackService.class);
             stopService(intent);
         }

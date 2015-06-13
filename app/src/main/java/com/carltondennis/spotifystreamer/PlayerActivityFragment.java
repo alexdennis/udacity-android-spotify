@@ -45,9 +45,10 @@ public class PlayerActivityFragment extends DialogFragment {
 
     private static final String TAG = PlayerActivityFragment.class.getSimpleName();
 
+    public static final String ACTION_TOKEN_UPDATE = "com.carltondennis.spotifystreamer.intent.action.PLAYBACK_UPDATE";
+
     public static final String TRACK_KEY = "track";
     public static final String TRACKS_KEY = "tracks";
-    public static final String ARTIST_KEY = "artist";
     public static final String SESSION_TOKEN_KEY = "session_token";
 
     private static final long PROGRESS_UPDATE_INTERNAL = 1000;
@@ -108,22 +109,18 @@ public class PlayerActivityFragment extends DialogFragment {
 
     private ScheduledFuture<?> mScheduleFuture;
 
-    private PlaybackUpdateReceiver mPlaybackUpdateReceiver = new PlaybackUpdateReceiver();
-    public class PlaybackUpdateReceiver extends BroadcastReceiver {
 
-        public static final String SESSION_UPDATE = "com.carltondennis.spotifystreamer.intent.action.SESSION_UPDATE";
-        public static final String CUSTOM_INTENT = "com.carltondennis.spotifystreamer.intent.action.PLAYBACK_UPDATE";
-        public static final String SESSION_KEY = "session";
+    private BroadcastReceiver mReceiver = new BroadcastReceiver() {
 
         @Override
         public void onReceive(Context context, Intent intent) {
-            if (intent.getAction().equals(PlaybackUpdateReceiver.SESSION_UPDATE)) {
+            if (intent.getAction().equals(PlayerActivityFragment.ACTION_TOKEN_UPDATE)) {
                 Bundle extras = intent.getExtras();
-                mToken = extras.getParcelable(SESSION_KEY);
+                mToken = extras.getParcelable(PlayerActivityFragment.SESSION_TOKEN_KEY);
                 connectToSession(mToken);
             }
         }
-    }
+    };
 
     private MediaController.Callback mCallback = new MediaController.Callback() {
         @Override
@@ -155,6 +152,155 @@ public class PlayerActivityFragment extends DialogFragment {
         if (state != null && (state.getState() == PlaybackState.STATE_PLAYING ||
                 state.getState() == PlaybackState.STATE_BUFFERING)) {
             scheduleSeekbarUpdate();
+        }
+    }
+
+    @Override
+    public View onCreateView(LayoutInflater inflater, ViewGroup container,
+                             Bundle savedInstanceState) {
+        View rootView = inflater.inflate(R.layout.fragment_player, container, false);
+
+        mAlbumView = (TextView) rootView.findViewById(R.id.player_album);
+        mArtistView = (TextView) rootView.findViewById(R.id.player_artist);
+        mTrackView = (TextView) rootView.findViewById(R.id.player_track_name);
+        mAlbumImageView = (ImageView) rootView.findViewById(R.id.player_album_image);
+        mTrackProgressView = (TextView) rootView.findViewById(R.id.player_track_progress);
+        mTrackDurationView = (TextView) rootView.findViewById(R.id.player_track_duration);
+        mTrackSeekBar = (SeekBar) rootView.findViewById(R.id.player_track_seek_bar);
+        mButtonNext = (ImageButton) rootView.findViewById(R.id.player_btn_next);
+        mButtonPlayPause = (ImageButton) rootView.findViewById(R.id.player_btn_play);
+        mButtonPrevious = (ImageButton) rootView.findViewById(R.id.player_btn_previous);
+
+        mButtonPrevious.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                mController.getTransportControls().skipToPrevious();
+            }
+        });
+        mButtonNext.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                mController.getTransportControls().skipToNext();
+            }
+        });
+        mButtonPlayPause.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (mController == null) {
+                    return;
+                }
+
+                switch (mState) {
+                    case PlaybackState.STATE_PLAYING: // fall through
+                    case PlaybackState.STATE_BUFFERING:
+                        mController.getTransportControls().pause();
+                        mButtonPlayPause.setImageResource(android.R.drawable.ic_media_play);
+                        stopSeekbarUpdate();
+                        break;
+                    case PlaybackState.STATE_PAUSED:
+                    case PlaybackState.STATE_STOPPED:
+                        mController.getTransportControls().play();
+                        mButtonPlayPause.setImageResource(android.R.drawable.ic_media_pause);
+                        scheduleSeekbarUpdate();
+                        break;
+                    default:
+                        Log.d(TAG, String.format("onClick with state = %d", mState));
+                }
+            }
+        });
+        mTrackSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                mTrackProgressView.setText(Utility.fromMillisecs(progress));
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {
+                stopSeekbarUpdate();
+            }
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {
+
+                mController.getTransportControls().seekTo(seekBar.getProgress());
+                scheduleSeekbarUpdate();
+            }
+        });
+
+        return rootView;
+
+    }
+
+    @Override
+    public void onActivityCreated(Bundle savedInstanceState) {
+        super.onActivityCreated(savedInstanceState);
+
+        if (savedInstanceState != null && savedInstanceState.containsKey(SESSION_TOKEN_KEY)) {
+            mToken = savedInstanceState.getParcelable(SESSION_TOKEN_KEY);
+            connectToSession(mToken);
+            return;
+        }
+
+        Bundle args = getArguments();
+        if (args != null) {
+            if (args.containsKey(SESSION_TOKEN_KEY)) {
+                mToken = args.getParcelable(SESSION_TOKEN_KEY);
+                connectToSession(mToken);
+            } else if (args.containsKey(TRACK_KEY) && args.containsKey(TRACKS_KEY)) {
+                // First time this fragment is run since there is no state, so we
+                // have to pass the new track list and queue position to the service
+                Intent intent = new Intent(getActivity(), PlaybackService.class);
+                intent.setAction(PlaybackService.ACTION_PLAY);
+                intent.putExtras(args);
+                getActivity().startService(intent);
+            }
+        }
+    }
+
+    @Override
+    public void onStart() {
+        super.onStart();
+        IntentFilter intentFilter = new IntentFilter(PlayerActivityFragment.ACTION_TOKEN_UPDATE);
+        getActivity().registerReceiver(mReceiver, intentFilter);
+    }
+
+    @Override
+    public void onStop() {
+        super.onStop();
+        getActivity().unregisterReceiver(mReceiver);
+    }
+
+    @Override
+    public void onSaveInstanceState(Bundle outState) {
+        super.onSaveInstanceState(outState);
+        outState.putParcelable(SESSION_TOKEN_KEY, mToken);
+    }
+
+    @Override
+    public void onDestroy() {
+        super.onDestroy();
+        stopSeekbarUpdate();
+        mExecutorService.shutdown();
+    }
+
+    private void scheduleSeekbarUpdate() {
+        stopSeekbarUpdate();
+        if (!mExecutorService.isShutdown()) {
+            mScheduleFuture = mExecutorService.scheduleAtFixedRate(
+                    new Runnable() {
+                        @Override
+                        public void run() {
+                            mHandler.post(mUpdateTimeTask);
+                        }
+                    }, PROGRESS_UPDATE_INITIAL_INTERVAL,
+                    PROGRESS_UPDATE_INTERNAL, TimeUnit.MILLISECONDS);
+        }
+    }
+
+    private void stopSeekbarUpdate() {
+        if (mScheduleFuture != null) {
+            mScheduleFuture.cancel(false);
         }
     }
 
@@ -271,161 +417,6 @@ public class PlayerActivityFragment extends DialogFragment {
         int duration = (int) metadata.getLong(MediaMetadata.METADATA_KEY_DURATION);
         mTrackDurationView.setText(Utility.fromMillisecs(duration));
         mTrackSeekBar.setMax(duration);
-    }
-
-    @Override
-    public View onCreateView(LayoutInflater inflater, ViewGroup container,
-                             Bundle savedInstanceState) {
-        View rootView = inflater.inflate(R.layout.fragment_player, container, false);
-
-        mAlbumView = (TextView) rootView.findViewById(R.id.player_album);
-        mArtistView = (TextView) rootView.findViewById(R.id.player_artist);
-        mTrackView = (TextView) rootView.findViewById(R.id.player_track_name);
-        mAlbumImageView = (ImageView) rootView.findViewById(R.id.player_album_image);
-        mTrackProgressView = (TextView) rootView.findViewById(R.id.player_track_progress);
-        mTrackDurationView = (TextView) rootView.findViewById(R.id.player_track_duration);
-        mTrackSeekBar = (SeekBar) rootView.findViewById(R.id.player_track_seek_bar);
-        mButtonNext = (ImageButton) rootView.findViewById(R.id.player_btn_next);
-        mButtonPlayPause = (ImageButton) rootView.findViewById(R.id.player_btn_play);
-        mButtonPrevious = (ImageButton) rootView.findViewById(R.id.player_btn_previous);
-
-        mButtonPrevious.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                mController.getTransportControls().skipToPrevious();
-            }
-        });
-        mButtonNext.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                mController.getTransportControls().skipToNext();
-            }
-        });
-        mButtonPlayPause.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                if (mController == null) {
-                    return;
-                }
-
-                switch (mState) {
-                    case PlaybackState.STATE_PLAYING: // fall through
-                    case PlaybackState.STATE_BUFFERING:
-                        mController.getTransportControls().pause();
-                        mButtonPlayPause.setImageResource(android.R.drawable.ic_media_play);
-                        stopSeekbarUpdate();
-                        break;
-                    case PlaybackState.STATE_PAUSED:
-                    case PlaybackState.STATE_STOPPED:
-                        mController.getTransportControls().play();
-                        mButtonPlayPause.setImageResource(android.R.drawable.ic_media_pause);
-                        scheduleSeekbarUpdate();
-                        break;
-                    default:
-                        Log.d(TAG, String.format("onClick with state = %d", mState));
-                }
-            }
-        });
-        mTrackSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-
-            @Override
-            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                mTrackProgressView.setText(Utility.fromMillisecs(progress));
-            }
-
-            @Override
-            public void onStartTrackingTouch(SeekBar seekBar) {
-                stopSeekbarUpdate();
-            }
-
-            @Override
-            public void onStopTrackingTouch(SeekBar seekBar) {
-
-                Intent intent = new Intent(getActivity(), PlaybackService.class);
-                intent.setAction(PlaybackService.ACTION_SEEK_TO);
-                Bundle extras = new Bundle();
-                extras.putInt(PlaybackService.SEEK_POS_KEY, seekBar.getProgress());
-                intent.putExtras(extras);
-                getActivity().startService(intent);
-                scheduleSeekbarUpdate();
-            }
-        });
-
-        return rootView;
-
-    }
-
-    @Override
-    public void onActivityCreated(Bundle savedInstanceState) {
-        super.onActivityCreated(savedInstanceState);
-
-        if (savedInstanceState != null && savedInstanceState.containsKey(SESSION_TOKEN_KEY)) {
-            mToken = savedInstanceState.getParcelable(SESSION_TOKEN_KEY);
-            connectToSession(mToken);
-            return;
-        }
-
-        Bundle args = getArguments();
-        if (args != null) {
-            if (args.containsKey(SESSION_TOKEN_KEY)) {
-                mToken = args.getParcelable(SESSION_TOKEN_KEY);
-                connectToSession(mToken);
-            } else if (args.containsKey(TRACK_KEY) && args.containsKey(TRACKS_KEY)) {
-                // First time this fragment is run since there is no state, so we
-                // have to pass the new track list and queue position to the service
-                Intent intent = new Intent(getActivity(), PlaybackService.class);
-                intent.setAction(PlaybackService.ACTION_PLAY);
-                intent.putExtras(args);
-                getActivity().startService(intent);
-            }
-        }
-    }
-
-    private void scheduleSeekbarUpdate() {
-        stopSeekbarUpdate();
-        if (!mExecutorService.isShutdown()) {
-            mScheduleFuture = mExecutorService.scheduleAtFixedRate(
-                    new Runnable() {
-                        @Override
-                        public void run() {
-                            mHandler.post(mUpdateTimeTask);
-                        }
-                    }, PROGRESS_UPDATE_INITIAL_INTERVAL,
-                    PROGRESS_UPDATE_INTERNAL, TimeUnit.MILLISECONDS);
-        }
-    }
-
-    private void stopSeekbarUpdate() {
-        if (mScheduleFuture != null) {
-            mScheduleFuture.cancel(false);
-        }
-    }
-
-    @Override
-    public void onResume() {
-        super.onResume();
-        IntentFilter intentFilter = new IntentFilter(PlaybackUpdateReceiver.CUSTOM_INTENT);
-        intentFilter.addAction(PlaybackUpdateReceiver.SESSION_UPDATE);
-        getActivity().registerReceiver(mPlaybackUpdateReceiver, intentFilter);
-    }
-
-    @Override
-    public void onPause() {
-        super.onPause();
-        getActivity().unregisterReceiver(mPlaybackUpdateReceiver);
-    }
-
-    @Override
-    public void onSaveInstanceState(Bundle outState) {
-        super.onSaveInstanceState(outState);
-        outState.putParcelable(SESSION_TOKEN_KEY, mToken);
-    }
-
-    @Override
-    public void onDestroy() {
-        super.onDestroy();
-        stopSeekbarUpdate();
-        mExecutorService.shutdown();
     }
 
 }
