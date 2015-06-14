@@ -40,6 +40,8 @@ public class PlaybackService extends Service {
 
     private static final int NOTIFICATION_ID = 411;
 
+    public static final String CUSTOM_METADATA_TRACK_URL = "__URL__";
+
     private MediaPlayer mMediaPlayer;
     private MediaSession mSession;
     private MediaController mController;
@@ -133,6 +135,11 @@ public class PlaybackService extends Service {
     }
 
     private void buildNotification(Notification.Action action) {
+        if (!Utility.isNotificationEnabled(getApplicationContext())) {
+            // Do not create notification if disabled
+            return;
+        }
+
         Notification.MediaStyle style = new Notification.MediaStyle();
 
         if (mTracks == null || mTracksQueuePosition < 0 || mTracksQueuePosition > mTracks.size()) {
@@ -159,7 +166,7 @@ public class PlaybackService extends Service {
         startForeground(NOTIFICATION_ID, notification);
 
         Picasso.with(getApplicationContext())
-                .load(track.imageLargeURL)
+                .load(track.imageSmallURL)
                 .into(new Target() {
                     @Override
                     public void onBitmapLoaded(Bitmap bitmap, Picasso.LoadedFrom from) {
@@ -340,23 +347,6 @@ public class PlaybackService extends Service {
         }
     }
 
-    private long getAvailableActions() {
-        long actions = PlaybackState.ACTION_PLAY;
-        if (mTracks == null || mTracks.isEmpty()) {
-            return actions;
-        }
-        if (mMediaPlayer != null && mMediaPlayer.isPlaying()) {
-            actions |= PlaybackState.ACTION_PAUSE;
-        }
-        if (mTracksQueuePosition > 0) {
-            actions |= PlaybackState.ACTION_SKIP_TO_PREVIOUS;
-        }
-        if (mTracksQueuePosition < mTracks.size() - 1) {
-            actions |= PlaybackState.ACTION_SKIP_TO_NEXT;
-        }
-        return actions;
-    }
-
     private void sendSessionToken() {
         Intent i = new Intent(PlayerActivityFragment.ACTION_TOKEN_UPDATE);
         Bundle extras = new Bundle();
@@ -377,8 +367,7 @@ public class PlaybackService extends Service {
             position = mMediaPlayer.getCurrentPosition();
         }
 
-        PlaybackState.Builder stateBuilder = new PlaybackState.Builder()
-                .setActions(getAvailableActions());
+        PlaybackState.Builder stateBuilder = new PlaybackState.Builder();
 
         int state = mState;
 
@@ -423,6 +412,7 @@ public class PlaybackService extends Service {
         MediaMetadata metadata = new MediaMetadata.Builder()
                 .putString(MediaMetadata.METADATA_KEY_MEDIA_ID, id)
                 .putString(MediaMetadata.METADATA_KEY_ALBUM, track.albumName)
+                .putString(CUSTOM_METADATA_TRACK_URL, track.previewURL)
                 .putString(MediaMetadata.METADATA_KEY_ARTIST, track.artistName)
                 .putLong(MediaMetadata.METADATA_KEY_DURATION, duration)
                 .putString(MediaMetadata.METADATA_KEY_ALBUM_ART_URI, track.imageLargeURL)

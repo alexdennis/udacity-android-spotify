@@ -19,12 +19,16 @@ import android.os.SystemClock;
 import android.support.v7.graphics.Palette;
 import android.util.Log;
 import android.view.LayoutInflater;
+import android.view.Menu;
+import android.view.MenuInflater;
+import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.ProgressBar;
 import android.widget.SeekBar;
+import android.widget.ShareActionProvider;
 import android.widget.TextView;
 
 import com.squareup.picasso.Callback;
@@ -75,8 +79,10 @@ public class PlayerActivityFragment extends DialogFragment {
     private PlaybackState mLastPlaybackState;
     private MediaSession.Token mToken;
     private MediaController mController;
+    private MenuItem mShareMenuItem;
 
     public PlayerActivityFragment() {
+        setHasOptionsMenu(true);
     }
 
     public static PlayerActivityFragment newInstance(ArrayList<SpotifyTrack> tracks, int trackIndex) {
@@ -265,6 +271,17 @@ public class PlayerActivityFragment extends DialogFragment {
     }
 
     @Override
+    public void onCreateOptionsMenu(Menu menu, MenuInflater inflater) {
+        // Inflate the menu; this adds items to the action bar if it is present.
+        inflater.inflate(R.menu.menu_player_fragment, menu);
+
+        // Set up ShareActionProvider's default share intent
+        mShareMenuItem = menu.findItem(R.id.action_share);
+
+        super.onCreateOptionsMenu(menu, inflater);
+    }
+
+    @Override
     public void onStart() {
         super.onStart();
         IntentFilter intentFilter = new IntentFilter(PlayerActivityFragment.ACTION_TOKEN_UPDATE);
@@ -327,6 +344,26 @@ public class PlayerActivityFragment extends DialogFragment {
         mTrackSeekBar.setProgress((int) currentPosition);
     }
 
+    private void createShareIntent(String spotifyUrl) {
+
+        if (mShareMenuItem == null) {
+            Log.d(TAG, "Share Menu Item is null?");
+            return;
+        }
+
+        ShareActionProvider shareActionProvider = (ShareActionProvider) mShareMenuItem.getActionProvider();
+        if (shareActionProvider == null) {
+            Log.d(TAG, "Share Action Provider is null?");
+        } else if (spotifyUrl == null) {
+            Log.d(TAG, "Spotify Url String is null?");
+        } else {
+            Intent intent = new Intent(Intent.ACTION_SEND);
+            intent.setType("text/plain");
+            intent.putExtra(Intent.EXTRA_TEXT, spotifyUrl);
+            shareActionProvider.setShareIntent(intent);
+        }
+    }
+
     private void updateMediaDescription(MediaMetadata mediaMetadata) {
         if (mediaMetadata == null) {
             return;
@@ -337,10 +374,14 @@ public class PlayerActivityFragment extends DialogFragment {
         String title = mediaMetadata.getString(MediaMetadata.METADATA_KEY_TITLE);
         String artist = mediaMetadata.getString(MediaMetadata.METADATA_KEY_ARTIST);
         String art = mediaMetadata.getString(MediaMetadata.METADATA_KEY_ALBUM_ART_URI);
+        String previewUrl = mediaMetadata.getString(PlaybackService.CUSTOM_METADATA_TRACK_URL);
 
         mAlbumView.setText(album);
         mTrackView.setText(title);
         mArtistView.setText(artist);
+
+        // This will be shared via sharing intent
+        createShareIntent(previewUrl);
 
         Picasso.with(getActivity())
                 .load(art)
