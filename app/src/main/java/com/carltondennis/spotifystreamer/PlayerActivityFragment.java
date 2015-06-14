@@ -1,5 +1,6 @@
 package com.carltondennis.spotifystreamer;
 
+import android.app.Activity;
 import android.app.DialogFragment;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -22,6 +23,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageButton;
 import android.widget.ImageView;
+import android.widget.ProgressBar;
 import android.widget.SeekBar;
 import android.widget.TextView;
 
@@ -57,6 +59,7 @@ public class PlayerActivityFragment extends DialogFragment {
     private TextView mAlbumView;
     private TextView mArtistView;
     private TextView mTrackView;
+    private TextView mLine4View;
     private ImageView mAlbumImageView;
     private TextView mTrackProgressView;
     private TextView mTrackDurationView;
@@ -64,6 +67,7 @@ public class PlayerActivityFragment extends DialogFragment {
     private ImageButton mButtonPrevious;
     private ImageButton mButtonNext;
     private ImageButton mButtonPlayPause;
+    private ProgressBar mLoading;
 
 
     private Handler mHandler = new Handler();
@@ -164,12 +168,14 @@ public class PlayerActivityFragment extends DialogFragment {
         mArtistView = (TextView) rootView.findViewById(R.id.player_artist);
         mTrackView = (TextView) rootView.findViewById(R.id.player_track_name);
         mAlbumImageView = (ImageView) rootView.findViewById(R.id.player_album_image);
+        mLine4View = (TextView) rootView.findViewById(R.id.player_line4);
         mTrackProgressView = (TextView) rootView.findViewById(R.id.player_track_progress);
         mTrackDurationView = (TextView) rootView.findViewById(R.id.player_track_duration);
         mTrackSeekBar = (SeekBar) rootView.findViewById(R.id.player_track_seek_bar);
         mButtonNext = (ImageButton) rootView.findViewById(R.id.player_btn_next);
         mButtonPlayPause = (ImageButton) rootView.findViewById(R.id.player_btn_play);
         mButtonPrevious = (ImageButton) rootView.findViewById(R.id.player_btn_previous);
+        mLoading = (ProgressBar) rootView.findViewById(R.id.player_loading);
 
         mButtonPrevious.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -352,6 +358,8 @@ public class PlayerActivityFragment extends DialogFragment {
                         mButtonPrevious.setColorFilter(foreground);
                         mTrackSeekBar.setProgressTintList(ColorStateList.valueOf(foreground));
                         mTrackSeekBar.setThumbTintList(ColorStateList.valueOf(foreground));
+                        mLoading.setProgressTintList(ColorStateList.valueOf(foreground));
+                        mLoading.setBackgroundTintList(ColorStateList.valueOf(foreground));
                     }
                 });
     }
@@ -362,18 +370,11 @@ public class PlayerActivityFragment extends DialogFragment {
         }
         mLastPlaybackState = state;
         mState = mLastPlaybackState.getState();
-//        String castName = getMediaController()
-//                .getExtras().getString(MusicService.EXTRA_CONNECTED_CAST);
-        String line3Text = "";
-//        if (castName != null) {
-//            line3Text = getResources()
-//                    .getString(R.string.casting_to_device, castName);
-//        }
-//        mLine3.setText(line3Text);
+        mLine4View.setText("");
 
         switch (state.getState()) {
             case PlaybackState.STATE_PLAYING:
-//                mLoading.setVisibility(INVISIBLE);
+                mLoading.setVisibility(INVISIBLE);
                 mButtonPlayPause.setVisibility(VISIBLE);
                 mButtonPlayPause.setImageResource(android.R.drawable.ic_media_pause);
 //                mControllers.setVisibility(VISIBLE);
@@ -381,32 +382,34 @@ public class PlayerActivityFragment extends DialogFragment {
                 break;
             case PlaybackState.STATE_PAUSED:
 //                mControllers.setVisibility(VISIBLE);
-//                mLoading.setVisibility(INVISIBLE);
+                mLoading.setVisibility(INVISIBLE);
                 mButtonPlayPause.setVisibility(VISIBLE);
                 mButtonPlayPause.setImageResource(android.R.drawable.ic_media_play);
                 stopSeekbarUpdate();
                 break;
             case PlaybackState.STATE_NONE:
-            case PlaybackState.STATE_STOPPED:
-//                mLoading.setVisibility(INVISIBLE);
+                mLoading.setVisibility(INVISIBLE);
                 mButtonPlayPause.setVisibility(VISIBLE);
-                mButtonPlayPause.setImageResource(android.R.drawable.ic_media_pause);
+                mButtonPlayPause.setImageResource(android.R.drawable.ic_media_play);
                 stopSeekbarUpdate();
                 break;
             case PlaybackState.STATE_BUFFERING:
                 mButtonPlayPause.setVisibility(INVISIBLE);
-//                mLoading.setVisibility(VISIBLE);
-//                mLine3.setText(R.string.loading);
+                mLoading.setVisibility(VISIBLE);
+                mLine4View.setText(R.string.loading);
                 stopSeekbarUpdate();
                 break;
+            case PlaybackState.STATE_STOPPED:
+                Activity a = getActivity();
+                if (a instanceof PlayerActivity) {
+                    getActivity().finish();
+                } else {
+                    // in dialog fragment mode so dismiss
+                    dismiss();
+                }
             default:
                 Log.d(TAG, "Unhandled state " + state.getState());
         }
-
-//        mSkipNext.setVisibility((state.getActions() & PlaybackState.ACTION_SKIP_TO_NEXT) == 0
-//                ? INVISIBLE : VISIBLE);
-//        mSkipPrev.setVisibility((state.getActions() & PlaybackState.ACTION_SKIP_TO_PREVIOUS) == 0
-//                ? INVISIBLE : VISIBLE);
     }
 
     private void updateDuration(MediaMetadata metadata) {
