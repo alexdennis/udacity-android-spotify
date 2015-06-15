@@ -70,16 +70,6 @@ public class SettingsActivity extends PreferenceActivity
             preference.setSummary(stringValue);
         }
 
-        // are we starting the preference activity?
-        if ( !mBindingPreference ) {
-            if (preference.getKey().equals(getString(R.string.pref_country_key))) {
-
-                // SunshineSyncAdapter.syncImmediately(this);
-            } else {
-                // notify code that weather may be impacted
-                // getContentResolver().notifyChange(WeatherContract.WeatherEntry.CONTENT_URI, null);
-            }
-        }
         return true;
     }
 

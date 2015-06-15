@@ -32,11 +32,6 @@ public class ArtistsAdapter extends ArrayAdapter<SpotifyArtist> {
         mItems = items;
     }
 
-    public ArrayList<SpotifyArtist> getArtists() {
-        return mItems;
-    }
-
-
     @Override
     public View getView(int position, View convertView, ViewGroup parent) {
         View view = convertView;

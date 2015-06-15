@@ -5,10 +5,6 @@ import android.os.Bundle;
 
 import com.carltondennis.spotifystreamer.R;
 import com.carltondennis.spotifystreamer.data.SpotifyTrack;
-import com.carltondennis.spotifystreamer.ui.BaseActivity;
-import com.carltondennis.spotifystreamer.ui.PlayerActivity;
-import com.carltondennis.spotifystreamer.ui.PlayerActivityFragment;
-import com.carltondennis.spotifystreamer.ui.TracksActivityFragment;
 
 import java.util.ArrayList;
 

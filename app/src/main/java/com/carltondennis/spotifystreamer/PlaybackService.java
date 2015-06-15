@@ -14,13 +14,12 @@ import android.media.session.MediaController;
 import android.media.session.MediaSession;
 import android.media.session.PlaybackState;
 import android.net.wifi.WifiManager;
+import android.net.wifi.WifiManager.WifiLock;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.os.PowerManager;
 import android.os.SystemClock;
-import android.support.wearable.media.MediaControlConstants;
 import android.util.Log;
-import android.net.wifi.WifiManager.WifiLock;
 
 import com.carltondennis.spotifystreamer.data.SpotifyTrack;
 import com.carltondennis.spotifystreamer.ui.MainActivity;
@@ -71,12 +70,6 @@ public class PlaybackService extends Service {
         mSession.setCallback(new MediaSessionCallback());
         mSession.setFlags(MediaSession.FLAG_HANDLES_MEDIA_BUTTONS |
                 MediaSession.FLAG_HANDLES_TRANSPORT_CONTROLS);
-
-        Bundle sessionExtras = new Bundle();
-        sessionExtras.putBoolean(MediaControlConstants.EXTRA_RESERVE_SLOT_SKIP_TO_PREVIOUS, true);
-        sessionExtras.putBoolean(MediaControlConstants.EXTRA_RESERVE_SLOT_SKIP_TO_NEXT, true);
-        sessionExtras.putBoolean(MediaControlConstants.EXTRA_BACKGROUND_COLOR_FROM_THEME, true);
-        mSession.setExtras(sessionExtras);
 
         mController = new MediaController(getApplicationContext(), mSession.getSessionToken());
         mNotificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
@@ -162,31 +155,33 @@ public class PlaybackService extends Service {
         builder.addAction(generateAction(android.R.drawable.ic_media_previous, "Previous", ACTION_PREVIOUS));
         builder.addAction(action);
         builder.addAction(generateAction(android.R.drawable.ic_media_next, "Next", ACTION_NEXT));
-        style.setShowActionsInCompactView(1);
+        style.setShowActionsInCompactView(1, 2);
         style.setMediaSession(mSession.getSessionToken());
 
         Notification notification = builder.build();
         startForeground(NOTIFICATION_ID, notification);
 
-        Picasso.with(getApplicationContext())
-                .load(track.imageSmallURL)
-                .into(new Target() {
-                    @Override
-                    public void onBitmapLoaded(Bitmap bitmap, Picasso.LoadedFrom from) {
-                        // cache is now warmed up
-                        builder.setLargeIcon(bitmap);
-                        mNotificationManager.notify(NOTIFICATION_ID, builder.build());
-                    }
+        if (track.imageSmallURL != null) {
 
-                    @Override
-                    public void onBitmapFailed(Drawable errorDrawable) {
-                    }
+            Picasso.with(getApplicationContext())
+                    .load(track.imageSmallURL)
+                    .into(new Target() {
+                        @Override
+                        public void onBitmapLoaded(Bitmap bitmap, Picasso.LoadedFrom from) {
+                            // cache is now warmed up
+                            builder.setLargeIcon(bitmap);
+                            mNotificationManager.notify(NOTIFICATION_ID, builder.build());
+                        }
 
-                    @Override
-                    public void onPrepareLoad(Drawable placeHolderDrawable) {
-                    }
-                });
+                        @Override
+                        public void onBitmapFailed(Drawable errorDrawable) {
+                        }
 
+                        @Override
+                        public void onPrepareLoad(Drawable placeHolderDrawable) {
+                        }
+                    });
+        }
     }
 
     private void relaxResources(boolean releaseMediaPlayer) {

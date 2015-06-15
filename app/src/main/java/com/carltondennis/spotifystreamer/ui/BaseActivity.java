@@ -63,16 +63,20 @@ public abstract class BaseActivity extends Activity {
     }
 
     public void showNowPlaying() {
-        MenuItem nowPlaying = mMenu.findItem(R.id.action_now_playing);
-        nowPlaying.setVisible(true);
+        if (mMenu != null) {
+            MenuItem nowPlaying = mMenu.findItem(R.id.action_now_playing);
+            nowPlaying.setVisible(true);
+        }
     }
 
     public void hideNowPlaying() {
-        MenuItem nowPlaying = mMenu.findItem(R.id.action_now_playing);
-        nowPlaying.setVisible(false);
+        if (mMenu != null) {
+            MenuItem nowPlaying = mMenu.findItem(R.id.action_now_playing);
+            nowPlaying.setVisible(false);
+        }
     }
 
-    private void updatePlaybackState(PlaybackState state) {
+    protected void updatePlaybackState(PlaybackState state) {
         mLastPlaybackState = state;
 
         if (state == null) {
@@ -90,7 +94,7 @@ public abstract class BaseActivity extends Activity {
     }
 
     public void showPlayer(boolean isTwoPane) {
-        if (!(mToken == null)) {
+        if (mToken != null) {
             if (isTwoPane) {
                 PlayerActivityFragment f = PlayerActivityFragment.newInstance(mToken);
                 f.show(getFragmentManager(), "dialog");

@@ -32,7 +32,6 @@ import retrofit.RetrofitError;
 public class MainActivityFragment extends Fragment {
 
     private static final String TAG = MainActivityFragment.class.getSimpleName();
-    private static final String QUERY_KEY = "query";
     private static final String POSITION_KEY = "pos";
 
     private ArtistsAdapter mArtistsAdapter;
@@ -61,9 +60,6 @@ public class MainActivityFragment extends Fragment {
                 if (artist != null) {
                     ((Callback) getActivity()).onArtistSelected(artist);
                     mPosition = position;
-//                    if (mPosition != ListView.INVALID_POSITION) {
-//                        mArtistsList.setSelection(position);
-//                    }
                 }
             }
         });
@@ -110,7 +106,7 @@ public class MainActivityFragment extends Fragment {
         /**
          * Callback for when an item has been selected.
          */
-        public void onArtistSelected(SpotifyArtist artist);
+        void onArtistSelected(SpotifyArtist artist);
     }
 
     class FetchArtistsTask extends AsyncTask<String, Void, ArrayList<SpotifyArtist>> {

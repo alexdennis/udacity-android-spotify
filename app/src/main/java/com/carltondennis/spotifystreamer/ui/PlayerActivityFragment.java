@@ -55,8 +55,6 @@ public class PlayerActivityFragment extends DialogFragment {
 
     private static final String TAG = PlayerActivityFragment.class.getSimpleName();
 
-    public static final String ACTION_TOKEN_UPDATE = "com.carltondennis.spotifystreamer.intent.action.PLAYBACK_UPDATE";
-
     public static final String TRACK_KEY = "track";
     public static final String TRACKS_KEY = "tracks";
     public static final String SESSION_TOKEN_KEY = "session_token";

@@ -30,6 +30,7 @@ public class MainActivity extends BaseActivity implements MainActivityFragment.C
         if (savedInstanceState == null) {
             Intent intent = getIntent();
             if (intent != null && intent.hasExtra(PlayerActivityFragment.SESSION_TOKEN_KEY)) {
+                showPlayer(mTwoPane);
                 MediaSession.Token token = intent.getParcelableExtra(PlayerActivityFragment.SESSION_TOKEN_KEY);
                 if (mTwoPane) {
                     PlayerActivityFragment f = PlayerActivityFragment.newInstance(token);
@@ -51,7 +52,6 @@ public class MainActivity extends BaseActivity implements MainActivityFragment.C
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
         if (item.getItemId() == R.id.action_now_playing) {
-            // Show player in fragment
             showPlayer(mTwoPane);
             return true;
         }

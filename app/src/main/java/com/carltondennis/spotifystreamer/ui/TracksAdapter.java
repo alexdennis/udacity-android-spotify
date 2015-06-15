@@ -19,8 +19,6 @@ import java.util.ArrayList;
  */
 public class TracksAdapter extends ArrayAdapter<SpotifyTrack> {
 
-    private static final String TAG = TracksAdapter.class.getSimpleName();
-
     private Context mContext;
     private int mResource;
     private ArrayList<SpotifyTrack> mItems;

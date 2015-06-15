@@ -10,6 +10,8 @@ import java.util.WeakHashMap;
 
 /**
  * Created by alex on 6/6/15.
+ *
+ * http://jakewharton.com/coercing-picasso-to-play-with-palette/
  */
 public final class PaletteTransformation implements Transformation {
     private static final PaletteTransformation INSTANCE = new PaletteTransformation();
