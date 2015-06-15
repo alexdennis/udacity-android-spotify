@@ -1,15 +1,19 @@
-package com.carltondennis.spotifystreamer;
+package com.carltondennis.spotifystreamer.ui;
 
-import android.app.Activity;
 import android.content.Intent;
 import android.os.Bundle;
-import android.view.Menu;
-import android.view.MenuItem;
+
+import com.carltondennis.spotifystreamer.R;
+import com.carltondennis.spotifystreamer.data.SpotifyTrack;
+import com.carltondennis.spotifystreamer.ui.BaseActivity;
+import com.carltondennis.spotifystreamer.ui.PlayerActivity;
+import com.carltondennis.spotifystreamer.ui.PlayerActivityFragment;
+import com.carltondennis.spotifystreamer.ui.TracksActivityFragment;
 
 import java.util.ArrayList;
 
 
-public class TracksActivity extends Activity implements TracksActivityFragment.Callback {
+public class TracksActivity extends BaseActivity implements TracksActivityFragment.Callback {
 
 
     @Override
@@ -26,29 +30,6 @@ public class TracksActivity extends Activity implements TracksActivityFragment.C
                     .replace(R.id.tracks_detail_container, f)
                     .commit();
         }
-    }
-
-    @Override
-    public boolean onCreateOptionsMenu(Menu menu) {
-        // Inflate the menu; this adds items to the action bar if it is present.
-        getMenuInflater().inflate(R.menu.menu_tracks, menu);
-        return true;
-    }
-
-    @Override
-    public boolean onOptionsItemSelected(MenuItem item) {
-        // Handle action bar item clicks here. The action bar will
-        // automatically handle clicks on the Home/Up button, so long
-        // as you specify a parent activity in AndroidManifest.xml.
-        int id = item.getItemId();
-
-        //noinspection SimplifiableIfStatement
-        if (id == R.id.action_settings) {
-            startActivity(new Intent(this, SettingsActivity.class));
-            return true;
-        }
-
-        return super.onOptionsItemSelected(item);
     }
 
     public void onTrackSelected(ArrayList<SpotifyTrack> tracks, int trackIndex) {

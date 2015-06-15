@@ -1,4 +1,4 @@
-package com.carltondennis.spotifystreamer;
+package com.carltondennis.spotifystreamer.data;
 
 import android.os.Parcel;
 import android.os.Parcelable;

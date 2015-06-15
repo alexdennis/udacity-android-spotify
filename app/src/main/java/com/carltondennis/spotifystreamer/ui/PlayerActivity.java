@@ -1,4 +1,4 @@
-package com.carltondennis.spotifystreamer;
+package com.carltondennis.spotifystreamer.ui;
 
 import android.app.Activity;
 import android.content.Intent;
@@ -6,6 +6,9 @@ import android.media.session.MediaSession;
 import android.os.Bundle;
 import android.view.Menu;
 import android.view.MenuItem;
+
+import com.carltondennis.spotifystreamer.R;
+import com.carltondennis.spotifystreamer.data.SpotifyTrack;
 
 import java.util.ArrayList;
 

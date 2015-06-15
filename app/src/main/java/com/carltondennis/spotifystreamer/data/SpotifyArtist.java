@@ -1,4 +1,4 @@
-package com.carltondennis.spotifystreamer;
+package com.carltondennis.spotifystreamer.data;
 
 /**
  * Created by alex on 6/3/15.

@@ -22,6 +22,9 @@ import android.support.wearable.media.MediaControlConstants;
 import android.util.Log;
 import android.net.wifi.WifiManager.WifiLock;
 
+import com.carltondennis.spotifystreamer.data.SpotifyTrack;
+import com.carltondennis.spotifystreamer.ui.MainActivity;
+import com.carltondennis.spotifystreamer.ui.PlayerActivityFragment;
 import com.squareup.picasso.Picasso;
 import com.squareup.picasso.Target;
 
@@ -214,7 +217,7 @@ public class PlaybackService extends Service {
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         handleIntent(intent);
-        sendSessionToken();
+        broadcastSessionToken();
         return super.onStartCommand(intent, flags, startId);
     }
 
@@ -237,11 +240,6 @@ public class PlaybackService extends Service {
         } else {
             mMediaPlayer.reset();
         }
-    }
-
-    private void play()
-    {
-        play(false);
     }
 
     private void play(boolean isSkipOrPrevious) {
@@ -347,10 +345,10 @@ public class PlaybackService extends Service {
         }
     }
 
-    private void sendSessionToken() {
-        Intent i = new Intent(PlayerActivityFragment.ACTION_TOKEN_UPDATE);
+    private void broadcastSessionToken() {
+        Intent i = new Intent(MainActivity.ACTION_TOKEN_UPDATE);
         Bundle extras = new Bundle();
-        extras.putParcelable(PlayerActivityFragment.SESSION_TOKEN_KEY, mSession.getSessionToken());
+        extras.putParcelable(MainActivity.SESSION_TOKEN_KEY, mSession.getSessionToken());
         i.putExtras(extras);
         sendBroadcast(i);
     }
@@ -466,7 +464,7 @@ public class PlaybackService extends Service {
         public void onPlay() {
             super.onPlay();
             Log.d(TAG, "play");
-            play();
+            play(false);
         }
 
         @Override

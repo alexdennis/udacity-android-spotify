@@ -3,5 +3,5 @@
         android:title="@string/share"
         android:showAsAction="ifRoom"
         android:actionProviderClass="android.widget.ShareActionProvider"
-        />
+        android:visible="false" />
 </menu>

@@ -1,6 +1,5 @@
-package com.carltondennis.spotifystreamer;
+package com.carltondennis.spotifystreamer.ui;
 
-import android.app.Activity;
 import android.app.DialogFragment;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -31,6 +30,11 @@ import android.widget.SeekBar;
 import android.widget.ShareActionProvider;
 import android.widget.TextView;
 
+import com.carltondennis.spotifystreamer.PaletteTransformation;
+import com.carltondennis.spotifystreamer.PlaybackService;
+import com.carltondennis.spotifystreamer.R;
+import com.carltondennis.spotifystreamer.Utility;
+import com.carltondennis.spotifystreamer.data.SpotifyTrack;
 import com.squareup.picasso.Callback;
 import com.squareup.picasso.Picasso;
 
@@ -80,6 +84,7 @@ public class PlayerActivityFragment extends DialogFragment {
     private MediaSession.Token mToken;
     private MediaController mController;
     private MenuItem mShareMenuItem;
+    private boolean mInTabletMode;
 
     public PlayerActivityFragment() {
         setHasOptionsMenu(true);
@@ -124,9 +129,9 @@ public class PlayerActivityFragment extends DialogFragment {
 
         @Override
         public void onReceive(Context context, Intent intent) {
-            if (intent.getAction().equals(PlayerActivityFragment.ACTION_TOKEN_UPDATE)) {
+            if (intent.getAction().equals(MainActivity.ACTION_TOKEN_UPDATE)) {
                 Bundle extras = intent.getExtras();
-                mToken = extras.getParcelable(PlayerActivityFragment.SESSION_TOKEN_KEY);
+                mToken = extras.getParcelable(MainActivity.SESSION_TOKEN_KEY);
                 connectToSession(mToken);
             }
         }
@@ -268,12 +273,15 @@ public class PlayerActivityFragment extends DialogFragment {
                 getActivity().startService(intent);
             }
         }
+
+        mInTabletMode = (getActivity() instanceof MainActivity);
     }
 
     @Override
     public void onCreateOptionsMenu(Menu menu, MenuInflater inflater) {
         // Inflate the menu; this adds items to the action bar if it is present.
         inflater.inflate(R.menu.menu_player_fragment, menu);
+
 
         // Set up ShareActionProvider's default share intent
         mShareMenuItem = menu.findItem(R.id.action_share);
@@ -284,7 +292,7 @@ public class PlayerActivityFragment extends DialogFragment {
     @Override
     public void onStart() {
         super.onStart();
-        IntentFilter intentFilter = new IntentFilter(PlayerActivityFragment.ACTION_TOKEN_UPDATE);
+        IntentFilter intentFilter = new IntentFilter(MainActivity.ACTION_TOKEN_UPDATE);
         getActivity().registerReceiver(mReceiver, intentFilter);
     }
 
@@ -351,6 +359,11 @@ public class PlayerActivityFragment extends DialogFragment {
             return;
         }
 
+        if (mInTabletMode) {
+            Log.d(TAG, "No share menu item for tablet mode");
+            return;
+        }
+
         ShareActionProvider shareActionProvider = (ShareActionProvider) mShareMenuItem.getActionProvider();
         if (shareActionProvider == null) {
             Log.d(TAG, "Share Action Provider is null?");
@@ -361,6 +374,7 @@ public class PlayerActivityFragment extends DialogFragment {
             intent.setType("text/plain");
             intent.putExtra(Intent.EXTRA_TEXT, spotifyUrl);
             shareActionProvider.setShareIntent(intent);
+            mShareMenuItem.setVisible(true);
         }
     }
 
@@ -441,12 +455,10 @@ public class PlayerActivityFragment extends DialogFragment {
                 stopSeekbarUpdate();
                 break;
             case PlaybackState.STATE_STOPPED:
-                Activity a = getActivity();
-                if (a instanceof PlayerActivity) {
-                    getActivity().finish();
-                } else {
-                    // in dialog fragment mode so dismiss
+                if (mInTabletMode) {
                     dismiss();
+                } else {
+                    getActivity().finish();
                 }
             default:
                 Log.d(TAG, "Unhandled state " + state.getState());

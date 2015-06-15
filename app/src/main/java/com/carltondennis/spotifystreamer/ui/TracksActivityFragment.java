@@ -1,4 +1,4 @@
-package com.carltondennis.spotifystreamer;
+package com.carltondennis.spotifystreamer.ui;
 
 import android.app.Fragment;
 import android.os.AsyncTask;
@@ -9,6 +9,10 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.AdapterView;
 import android.widget.ListView;
+
+import com.carltondennis.spotifystreamer.R;
+import com.carltondennis.spotifystreamer.Utility;
+import com.carltondennis.spotifystreamer.data.SpotifyTrack;
 
 import java.util.ArrayList;
 import java.util.HashMap;

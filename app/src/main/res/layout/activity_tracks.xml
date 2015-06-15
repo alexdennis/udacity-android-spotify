@@ -3,5 +3,5 @@
     android:id="@+id/tracks_detail_container"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    tools:context="com.carltondennis.spotifystreamer.TracksActivity"
+    tools:context="com.carltondennis.spotifystreamer.ui.TracksActivity"
     tools:ignore="MergeRootFrame" />

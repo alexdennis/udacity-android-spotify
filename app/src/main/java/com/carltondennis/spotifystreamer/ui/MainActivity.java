@@ -1,16 +1,19 @@
-package com.carltondennis.spotifystreamer;
+package com.carltondennis.spotifystreamer.ui;
 
-import android.app.Activity;
 import android.content.Intent;
 import android.media.session.MediaSession;
 import android.os.Bundle;
-import android.view.Menu;
 import android.view.MenuItem;
+
+import com.carltondennis.spotifystreamer.R;
+import com.carltondennis.spotifystreamer.data.SpotifyArtist;
+import com.carltondennis.spotifystreamer.data.SpotifyTrack;
 
 import java.util.ArrayList;
 
 
-public class MainActivity extends Activity implements MainActivityFragment.Callback, TracksActivityFragment.Callback {
+public class MainActivity extends BaseActivity implements MainActivityFragment.Callback,
+        TracksActivityFragment.Callback {
 
     private boolean mTwoPane;
 
@@ -45,23 +48,11 @@ public class MainActivity extends Activity implements MainActivityFragment.Callb
         return mTwoPane;
     }
 
-
-    @Override
-    public boolean onCreateOptionsMenu(Menu menu) {
-        // Inflate the menu; this adds items to the action bar if it is present.
-        getMenuInflater().inflate(R.menu.menu_main, menu);
-        return true;
-    }
-
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
-        // Handle action bar item clicks here. The action bar will
-        // automatically handle clicks on the Home/Up button, so long
-        // as you specify a parent activity in AndroidManifest.xml.
-        int id = item.getItemId();
-
-        if (id == R.id.action_settings) {
-            startActivity(new Intent(this, SettingsActivity.class));
+        if (item.getItemId() == R.id.action_now_playing) {
+            // Show player in fragment
+            showPlayer(mTwoPane);
             return true;
         }
 
